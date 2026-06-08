@@ -13,6 +13,8 @@ const saveBtn = document.getElementById('save-btn');
 const cancelBtn = document.getElementById('cancel-btn');
 const historyBtn = document.getElementById('history-btn');
 const copyAllBtn = document.getElementById('copyall-btn');
+const pasteAllBtn = document.getElementById('pasteall-btn');
+let appEnv = 'development';
 
 const MODELS = ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'];
 const PROMPT_ORDER = ['speaker', 'whisperer', 'initial_thought', 'detection', 'evaluation'];
@@ -47,6 +49,7 @@ async function load() {
   working = JSON.parse(JSON.stringify(data.draft));
   versions = data.versions || [];
   publishedId = data.published_version_id;
+  appEnv = data.env || 'development';
   // Ensure prompts sorted in a stable order.
   working.prompts.sort((a, b) => PROMPT_ORDER.indexOf(a.prompt_type) - PROMPT_ORDER.indexOf(b.prompt_type));
   ensureKeys();
@@ -252,6 +255,16 @@ function afterEl(list, y) {
 
 // --- save / cancel / history ----------------------------------------------
 saveBtn.addEventListener('click', async () => {
+  // Extra guardrail in production: publishing replaces the LIVE config that real
+  // users hit right now. Require an explicit typed confirmation.
+  if (appEnv === 'production') {
+    const typed = prompt(
+      'You are about to PUBLISH to PRODUCTION.\n' +
+      'This immediately replaces the live config for real users.\n\n' +
+      'Type  PUBLISH  to confirm:'
+    );
+    if (typed !== 'PUBLISH') { alert('Cancelled - nothing was published.'); return; }
+  }
   const label = prompt('Optional label for this version:', '') || null;
   // Strip client-only _key before sending.
   const config = {
@@ -309,6 +322,79 @@ if (copyAllBtn) copyAllBtn.addEventListener('click', async () => {
     // Fallback: select-in-prompt so the user can copy manually.
     window.prompt('Copy the JSON below:', json);
   }
+});
+
+// Required prompt types - a pasted config missing any of these would break turns.
+const REQUIRED_PROMPT_TYPES = ['speaker', 'detection', 'evaluation', 'whisperer', 'initial_thought'];
+
+// Validate a pasted config object. Returns { ok, error } - we reject anything
+// malformed BEFORE loading it, so you can't load a config that breaks the app.
+function validateConfig(obj) {
+  if (!obj || typeof obj !== 'object') return { ok: false, error: 'Not a JSON object.' };
+  if (!Array.isArray(obj.prompts)) return { ok: false, error: 'Missing "prompts" array.' };
+  if (!Array.isArray(obj.parts)) return { ok: false, error: 'Missing "parts" array.' };
+  if (!Array.isArray(obj.tasks)) return { ok: false, error: 'Missing "tasks" array.' };
+  for (const p of obj.prompts) {
+    if (!p || typeof p.prompt_type !== 'string' || typeof p.body !== 'string' || typeof p.model !== 'string') {
+      return { ok: false, error: 'A prompt is missing prompt_type/body/model.' };
+    }
+  }
+  const types = new Set(obj.prompts.map((p) => p.prompt_type));
+  const missing = REQUIRED_PROMPT_TYPES.filter((t) => !types.has(t));
+  if (missing.length) return { ok: false, error: 'Missing required prompt(s): ' + missing.join(', ') };
+  return { ok: true };
+}
+
+if (pasteAllBtn) pasteAllBtn.addEventListener('click', async () => {
+  // Read JSON from the clipboard (fallback to a prompt box if blocked), validate,
+  // then LOAD INTO THE EDITOR - we do not publish here. The normal "Save & publish"
+  // (with its own prod confirmation) is the only thing that writes to the DB, so
+  // the paste is reviewable and reversible up to that point.
+  let raw = '';
+  try {
+    raw = await navigator.clipboard.readText();
+  } catch {
+    raw = window.prompt('Paste the prompts JSON here:', '') || '';
+  }
+  if (!raw.trim()) return;
+
+  let obj;
+  try { obj = JSON.parse(raw); }
+  catch { alert('That is not valid JSON. Copy the full output of "Copy all prompts" and try again.'); return; }
+
+  const v = validateConfig(obj);
+  if (!v.ok) { alert('Cannot paste this config:\n\n' + v.error); return; }
+
+  const summary =
+    `This will REPLACE the editor contents with the pasted config:\n\n` +
+    `  • ${obj.prompts.length} prompts\n` +
+    `  • ${obj.parts.length} parts\n` +
+    `  • ${obj.tasks.length} tasks\n\n` +
+    `Nothing is published yet - you'll review, then click "Save & publish".\n\nContinue?`;
+  if (!confirm(summary)) return;
+
+  // Load into the working model (normalize to the same shape load() produces).
+  working = {
+    flow_opener: obj.flow_opener || '',
+    payment_prompt: obj.payment_prompt || '',
+    payment_success: obj.payment_success || '',
+    rate_prompt: obj.rate_prompt || '',
+    rate_success: obj.rate_success || '',
+    prompts: obj.prompts.map((p) => ({ prompt_type: p.prompt_type, body: p.body, model: p.model })),
+    parts: obj.parts.map((p) => ({ name: p.name, body: p.body })),
+    tasks: obj.tasks.map((t) => ({
+      name: t.name, position: t.position, is_active: t.is_active !== false,
+      instruction: t.instruction, evaluation: t.evaluation, initial_thought: t.initial_thought,
+      end_message: t.end_message, max_user_messages: t.max_user_messages,
+      has_pretask_hook: t.has_pretask_hook || false,
+    })),
+  };
+  working.prompts.sort((a, b) => PROMPT_ORDER.indexOf(a.prompt_type) - PROMPT_ORDER.indexOf(b.prompt_type));
+  ensureKeys();
+  markDirty();
+  renderMenu();
+  if (working.prompts[0]) select('prompt', working.prompts[0].prompt_type);
+  alert('Pasted into the editor. Review the prompts, then click "Save & publish" to make it live.');
 });
 
 historyBtn.addEventListener('click', () => {

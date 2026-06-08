@@ -143,7 +143,12 @@ export default async function adminRoutes(app) {
     const draft = await getDraft();
     const published = await getPublished();
     const versions = await listVersions();
-    return { draft, published_version_id: published?.id || null, versions };
+    return {
+      draft,
+      published_version_id: published?.id || null,
+      versions,
+      env: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+    };
   });
 
   // Single save: the editor sends its entire in-memory config; we write all of
