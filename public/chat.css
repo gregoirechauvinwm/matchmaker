@@ -93,9 +93,13 @@ html, body {
    positioned by `top`. The single `.live` avatar transitions `top` (the slide);
    static copies mark past runs. CSS background-image paints synchronously from
    cache on iOS Safari (a fresh <img> would show a blank decode frame). */
-.col-avatar {
+/* Run avatar: a child of its run's LAST .bubble.ai, positioned relative to that
+   bubble (left gutter, aligned to the last text line). Because it rides with the
+   bubble, it's immune to bottom-aligned short chats and iOS viewport changes. */
+.run-avatar {
   position: absolute;
-  left: 0;                /* the ai bubbles are indented 36px -> this is the gutter */
+  left: -36px;            /* into the 36px gutter created by .bubble.ai margin-left */
+  bottom: 8px;            /* aligns the avatar's bottom with the bubble's last line */
   width: 26px; height: 26px;
   border-radius: 50%;
   background-size: cover;
@@ -104,12 +108,14 @@ html, body {
   pointer-events: none;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+  will-change: transform;
+  transform-origin: 0 100%;   /* pop grows from the gutter baseline */
 }
-.col-avatar.live {
-  opacity: 0;
-  transition: top .34s cubic-bezier(.33,1,.68,1);
+/* one-shot entrance pop for a new run's avatar (applied inline in JS) */
+@keyframes avatarpop {
+  0%   { opacity: 0; transform: scale(.4); }
+  100% { opacity: 1; transform: scale(1); }
 }
-.col-avatar.live.show { opacity: 1; }
 
 /* Bubbles (real chat design: Crimson Pro, cream user bubble, flush-left AI). */
 .bubble {
@@ -124,7 +130,7 @@ html, body {
   white-space: pre-wrap;
   -webkit-user-select: text; user-select: text;
 }
-.bubble.ai   { align-self: flex-start; background: transparent; color: var(--ai-text); padding-left: 0; max-width: 85%; margin-left: 36px; }
+.bubble.ai   { align-self: flex-start; background: transparent; color: var(--ai-text); padding-left: 0; max-width: 85%; margin-left: 36px; position: relative; }
 .bubble.user { align-self: flex-end;   background: #FAF5EC; color: #3F3626; }
 
 /* Sent-bubble rise+fade */
@@ -162,7 +168,7 @@ html, body {
   position: fixed;
   left: 0; right: 0; bottom: 0;
   z-index: 10;
-  padding: 36px 12px calc(8px + env(safe-area-inset-bottom));
+  padding: 36px 16px calc(8px + env(safe-area-inset-bottom));
   background: linear-gradient(
     to bottom,
     rgba(255,255,255,0) 0%,
@@ -177,18 +183,18 @@ html, body {
 .composer-pill {
   pointer-events: auto;
   display: flex; align-items: center; gap: 6px;
-  border-radius: 22px;
+  border-radius: 28px;
   padding: 5px 5px 5px 14px;
-  background: rgba(242, 242, 242, 0.80);
-  border: 1px solid #ffffff;
-  box-shadow: 0px -5px 50px 10px rgba(0, 0, 0, 0.10);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #dfdfdf;
+  /*box-shadow: 0px -5px 50px 10px rgba(0, 0, 0, 0.10);*/
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 .composer {
   flex: 1;
   resize: none; border: none; outline: none; background: transparent;
-  font-size: 16px; font-family: inherit; line-height: 1.3;
+  font-size: 18px; font-family: "Crimson Pro", Georgia, serif; line-height: 1.3;
   max-height: 120px; padding: 7px 0;
   color: #1c1c1e;
 }

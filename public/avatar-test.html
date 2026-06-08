@@ -1,0 +1,168 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<style>
+  :root { --ai-text:#1c1c1e; --ai-bubble:#E9E9EB; --cp:"Crimson Pro",Georgia,serif; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; height:100%; font-family: var(--cp); background:#fff; }
+  .app { display:flex; flex-direction:column; height:100dvh; height:100vh; height:100dvh; }
+
+  .topbar { flex:0 0 auto; padding:12px; border-bottom:1px solid #eee; text-align:center; font-size:20px; }
+
+  .scroller { flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .chat-messages {
+    display:flex; flex-direction:column; justify-content:flex-end;
+    gap:2px; min-height:100%; position:relative; padding:16px 16px 8px;
+  }
+
+  .composer { flex:0 0 auto; padding:12px 16px; border-top:1px solid #eee; display:flex; gap:8px; }
+  .composer input { flex:1; border:1px solid #e3e3e3; border-radius:20px; padding:10px 14px; outline:none; font-family:var(--cp); font-size:17px; }
+  .composer button { border:none; background:#0a84ff; color:#fff; border-radius:20px; padding:0 16px; font-size:15px; }
+
+  .bubble {
+    max-width:85%; padding:8px 13px; font-size:19px; line-height:1.2;
+    border-radius:18px; white-space:pre-wrap; position:relative; margin-top:2px;
+  }
+  .bubble.ai   { align-self:flex-start; background:transparent; color:var(--ai-text); padding-left:0; margin-left:36px; }
+  .bubble.user { align-self:flex-end;   background:#FAF5EC; color:#3F3626; }
+
+  /* ===== NEW: avatar is a child of its run-ending bubble; resting pos in CSS ===== */
+  .run-avatar {
+    position:absolute; left:-36px; bottom:8px;
+    width:26px; height:26px; border-radius:50%;
+    background-size:cover; background-position:center; background-repeat:no-repeat;
+    pointer-events:none;
+    -webkit-backface-visibility:hidden; backface-visibility:hidden;
+    will-change:transform; transform-origin: 0 100%;
+  }
+  /* tiny entrance pop when an avatar first appears for a new run. Applied as a
+     one-shot inline animation in makeAvatar; cleared on move. transform-origin
+     bottom-left so it grows from the gutter baseline. */
+  @keyframes avatarpop {
+    0%   { opacity:0; transform: scale(.4); }
+    100% { opacity:1; transform: scale(1); }
+  }
+
+  /* typing indicator — matches the real chat: gutter-aligned grey pill, NO avatar */
+  .typing {
+    align-self:flex-start; background:var(--ai-bubble);
+    border-radius:18px; padding:11px 14px; margin-top:8px; margin-left:36px;
+    display:inline-flex; gap:4px;
+  }
+  .typing .dot { width:7px; height:7px; border-radius:50%; background:#8e8e93; animation:dotbounce 1.2s infinite; }
+  .typing .dot:nth-child(2){ animation-delay:.18s; }
+  .typing .dot:nth-child(3){ animation-delay:.36s; }
+  @keyframes dotbounce { 0%,60%,100%{ transform:translateY(0); opacity:.4; } 30%{ transform:translateY(-4px); opacity:1; } }
+
+  /* control bar pinned above the composer, scrollable, doesn't overlap chat */
+  .ctl { flex:0 0 auto; display:flex; gap:6px; padding:8px 12px; border-top:1px dashed #ddd; overflow-x:auto; background:#fafafa; }
+  .ctl button { flex:0 0 auto; font-size:13px; padding:8px 10px; border:1px solid #ccc; border-radius:8px; background:#fff; font-family:var(--cp); }
+  .ctl label { flex:0 0 auto; font-size:12px; align-self:center; color:#666; }
+</style></head>
+<body>
+<div class="app">
+  <div class="topbar">My Amata</div>
+  <div class="scroller" id="scroller"><div class="chat-messages" id="m"></div></div>
+
+  <div class="ctl">
+    <button onclick="sendUser()">Send msg → AI replies</button>
+    <button onclick="aiNewRun()">AI new run</button>
+    <button onclick="reset()">Reset</button>
+    <label><input type="checkbox" id="slow" onchange="setSlow()"> slow-mo slide</label>
+  </div>
+
+  <div class="composer">
+    <input id="composer" placeholder="Message">
+    <button onclick="sendUser()">Send</button>
+  </div>
+</div>
+
+<script>
+const AV='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCI+PGRlZnM+PHJhZGlhbEdyYWRpZW50IGlkPSJnIiBjeD0iNTAlIiBjeT0iMzUlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjYzlhNmU4Ii8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjN2I0ZmI1Ii8+PC9yYWRpYWxHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMzAiIGN5PSIyNCIgcj0iMTEiIGZpbGw9IiNmMGQ5YzQiLz48cmVjdCB4PSIxNiIgeT0iMzYiIHdpZHRoPSIyOCIgaGVpZ2h0PSIyNCIgcng9IjEwIiBmaWxsPSIjOWZjMmI4Ii8+PC9zdmc+Cg==';
+const messagesEl=document.getElementById('m');
+const scroller=document.getElementById('scroller');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let SLIDE='.34s';
+function setSlow(){ SLIDE=document.getElementById('slow').checked?'1.1s':'.34s'; }
+
+function makeAvatar(){
+  const a=document.createElement('div'); a.className='run-avatar';
+  a.style.backgroundImage=`url("${AV}")`;
+  // One-shot entrance pop via inline animation. The move path clears it (below),
+  // so reparenting within a run cannot replay it.
+  a.style.animation='avatarpop .26s cubic-bezier(.34,1.56,.64,1) both';
+  return a;
+}
+function endsRun(nodes,i){const n=nodes[i];if(!n||!n.classList.contains('ai'))return false;const nx=nodes[i+1];return !nx||!nx.classList.contains('ai');}
+
+function reconcileAvatars(animate){
+  const nodes=[...messagesEl.querySelectorAll('.bubble')];
+  for(let i=0;i<nodes.length;i++){
+    const node=nodes[i]; const has=node.querySelector(':scope > .run-avatar'); const isEnder=endsRun(nodes,i);
+    if(isEnder && !has){
+      const prev=nodes[i-1];
+      const prevAv=prev && prev.classList.contains('ai') ? prev.querySelector(':scope > .run-avatar') : null;
+      if(prevAv){
+        prevAv.style.animation='';   // moving must never replay the entrance pop
+        if(animate){
+          const first=prevAv.getBoundingClientRect();
+          node.appendChild(prevAv);
+          const last=prevAv.getBoundingClientRect();
+          const dy=first.top-last.top, dx=first.left-last.left;
+          if(dy||dx){
+            prevAv.style.transition='none';
+            prevAv.style.transform=`translate(${dx}px,${dy}px)`;
+            void prevAv.offsetHeight;
+            requestAnimationFrame(()=>{ prevAv.style.transition=`transform ${SLIDE} cubic-bezier(.33,1,.68,1)`; prevAv.style.transform='translate(0,0)'; });
+          }
+        } else node.appendChild(prevAv);
+      } else node.appendChild(makeAvatar());
+    } else if(!isEnder && has){ has.remove(); }
+  }
+}
+
+function scrollToBottom(){ scroller.scrollTop=scroller.scrollHeight; }
+function addBubble(role,text,animate){
+  const d=document.createElement('div'); d.className='bubble '+role; d.textContent=text;
+  messagesEl.appendChild(d); reconcileAvatars(animate && role==='ai'); scrollToBottom();
+}
+
+// typing indicator
+let typingEl=null;
+function showTyping(){ if(typingEl){scrollToBottom();return;} typingEl=document.createElement('div'); typingEl.className='typing'; typingEl.innerHTML='<span class="dot"></span><span class="dot"></span><span class="dot"></span>'; messagesEl.appendChild(typingEl); scrollToBottom(); }
+function hideTyping(){ if(typingEl){typingEl.remove();typingEl=null;} }
+
+// Simulate the real drain loop: thinking dots, then 1-3 bubbles with gaps.
+const REPLIES=[
+  ['Great!','First I\'d love to hear a bit more about your story: how\'s your love life been so far, and what are your goals now?'],
+  ['Understanding your past helps me find people who actually fit.','Would you be comfortable sharing what worked or didn\'t in past relationships?'],
+  ['Got it — that\'s really helpful.'],
+];
+let replyIdx=0; let busy=false;
+async function aiTurn(){
+  if(busy) return; busy=true;
+  const bubbles=REPLIES[replyIdx % REPLIES.length]; replyIdx++;
+  showTyping(); await sleep(1400);          // initial think
+  for(let k=0;k<bubbles.length;k++){
+    if(k>0){ showTyping(); await sleep(1200); }  // gap between bubbles (dots)
+    hideTyping();
+    addBubble('ai', bubbles[k], true);            // avatar slides to this bubble
+    await sleep(150);
+  }
+  busy=false;
+}
+async function sendUser(){
+  const inp=document.getElementById('composer'); const t=(inp.value.trim()||'Sure');
+  inp.value='';
+  addBubble('user', t, false);
+  await aiTurn();
+}
+function aiNewRun(){ addBubble('ai','A standalone AI message (new run).', false); }
+function reset(){ hideTyping(); messagesEl.innerHTML=''; replyIdx=0; busy=false; }
+
+// seed: opener as a fresh AI run with dots first (like loadMessages isFreshOpener)
+(async()=>{ showTyping(); await sleep(1200); hideTyping(); addBubble('ai','Hey! Glad you\'re interested in our next Blind Tuesdate event in Manhattan. Ready to begin?', false); })();
+window.sendUser=sendUser; window.aiNewRun=aiNewRun; window.reset=reset; window.setSlow=setSlow;
+</script>
+</body></html>

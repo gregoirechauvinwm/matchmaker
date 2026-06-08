@@ -50,7 +50,7 @@ let amataAvatarUrl = null;
         img.style.objectFit = 'cover'; img.style.borderRadius = '50%';
         av.appendChild(img);
       }
-      rebuildAvatars();
+      reconcileAvatars(false);
     }
   } catch {}
 })();
@@ -59,99 +59,84 @@ let messages = [];      // {id, role, text} - mirror of what's rendered
 let sending = false;
 let rendering = false;  // true only during full renderAll (suppresses live-avatar work)
 
-// --- run avatars (column model) --------------------------------------------
-// ONE persistent "live" avatar floats in the left gutter, positioned only by
-// its `top` value; changing top animates it (the slide) - it never changes
-// parent or reloads its image, so it never lags or flashes. When an AI run ends
-// (a user message arrives, or on history render), we stamp a STATIC copy at
-// that run's last-bubble position and hide the live avatar until the next run.
-const AVATAR_SIZE = 26;
-const AVATAR_PAD = 8;   // matches .bubble.ai padding-bottom -> baseline align
+// --- run avatars (bubble-anchored model) -----------------------------------
+// Each AI "run" (consecutive AI bubbles) shows ONE avatar, attached as a CHILD
+// of that run's LAST bubble. Its resting position is defined purely in CSS
+// (.run-avatar { position:absolute; left:-36px; bottom:8px } inside .bubble.ai),
+// so it rides with its bubble through any reflow - bottom-aligned short chats,
+// the iOS keyboard, URL-bar collapse - with no offsetTop math to go stale.
+// reconcileAvatars() makes the DOM match that rule: every run-ender owns exactly
+// one avatar; when a run grows we MOVE the same node to the new ender.
+const AVATAR_SLIDE = 'transform .34s cubic-bezier(.33,1,.68,1)';
 
-let liveAvatar = null;
-
-function makeAvatarNode(extraClass) {
+function makeAvatarNode() {
   const a = document.createElement('div');
-  a.className = 'col-avatar' + (extraClass ? ' ' + extraClass : '');
+  a.className = 'run-avatar';
   // CSS background-image (not <img>): on iOS Safari a fresh <img> shows a blank
   // frame while decoding, but a cached background paints synchronously.
   if (amataAvatarUrl) a.style.backgroundImage = `url("${amataAvatarUrl}")`;
+  // One-shot entrance pop for a brand-new run's avatar. Cleared on move below so
+  // reparenting within a run can't replay it.
+  a.style.animation = 'avatarpop .26s cubic-bezier(.34,1.56,.64,1) both';
   return a;
 }
 
-function ensureLiveAvatar() {
-  if (liveAvatar) return liveAvatar;
-  liveAvatar = makeAvatarNode('live');
-  messagesEl.appendChild(liveAvatar);
-  return liveAvatar;
-}
-
-// Vertical offset so the avatar's bottom aligns with the bubble's last text line.
-function avatarTopFor(bubble) {
-  return bubble.offsetTop + bubble.offsetHeight - AVATAR_SIZE - AVATAR_PAD;
-}
-
-function endsRun(nodes, i) {
+function aiEndsRun(nodes, i) {
   const n = nodes[i];
   if (!n || !n.classList.contains('ai')) return false;
   const next = nodes[i + 1];
   return !next || !next.classList.contains('ai');
 }
 
-// Position the live avatar on the last AI bubble of the current (live) run.
-// animate=false -> appear in the SAME frame as the bubble (no slide); used for
-// the first bubble of a run. animate=true -> transition `top` (the slide).
-function positionLiveAvatar(animate) {
+// Make avatars match the rule. `animate` slides the moved avatar (FLIP);
+// `firstRect` is the avatar's pre-move viewport rect (captured before the new
+// bubble shifted layout) so the slide measures from the true start.
+function reconcileAvatars(animate, firstRect) {
   if (!amataAvatarUrl) return;
-  const bubbles = [...messagesEl.querySelectorAll('.bubble')];
-  const last = bubbles[bubbles.length - 1];
-  const el = ensureLiveAvatar();
-
-  if (!last || !last.classList.contains('ai')) { el.classList.remove('show'); return; }
-
-  const top = avatarTopFor(last);
-  if (animate) {
-    el.classList.add('show');     // transitions `top` via CSS
-    el.style.top = top + 'px';
-  } else {
-    // First bubble of a run: no slide. Kill the transition, set top + show in
-    // the same frame as the bubble paints, then restore transitions next frame.
-    el.style.transition = 'none';
-    el.style.top = top + 'px';
-    el.classList.add('show');
-    requestAnimationFrame(() => { el.style.transition = ''; });
+  const nodes = [...messagesEl.querySelectorAll('.bubble')];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const has = node.querySelector(':scope > .run-avatar');
+    const isEnder = aiEndsRun(nodes, i);
+    if (isEnder && !has) {
+      const prev = nodes[i - 1];
+      const prevAv = prev && prev.classList.contains('ai')
+        ? prev.querySelector(':scope > .run-avatar') : null;
+      if (prevAv) {
+        prevAv.style.animation = '';   // moving must never replay the entrance pop
+        if (animate) {
+          const first = firstRect || prevAv.getBoundingClientRect();
+          node.appendChild(prevAv);
+          const last = prevAv.getBoundingClientRect();
+          const dy = first.top - last.top, dx = first.left - last.left;
+          if (dy || dx) {
+            prevAv.style.transition = 'none';
+            prevAv.style.transform = `translate(${dx}px,${dy}px)`;
+            void prevAv.offsetHeight;
+            requestAnimationFrame(() => {
+              prevAv.style.transition = AVATAR_SLIDE;
+              prevAv.style.transform = 'translate(0,0)';
+            });
+          }
+        } else {
+          node.appendChild(prevAv);
+        }
+      } else {
+        node.appendChild(makeAvatarNode());
+      }
+    } else if (!isEnder && has) {
+      has.remove();
+    }
   }
 }
 
-// Stamp a permanent static avatar at a (closed) run's last AI bubble.
-function stampStaticAvatar(bubble) {
-  if (!amataAvatarUrl || !bubble) return;
-  const s = makeAvatarNode();
-  s.style.top = avatarTopFor(bubble) + 'px';
-  messagesEl.appendChild(s);
-}
-
-// Rebuild all static avatars from scratch (used on full render / resize / font
-// load). One static avatar per run-ender; the live avatar is repositioned onto
-// the final run if it's still open (ends in ai).
-function rebuildAvatars() {
-  if (!amataAvatarUrl) return;
-  messagesEl.querySelectorAll('.col-avatar:not(.live)').forEach((n) => n.remove());
-  const bubbles = [...messagesEl.querySelectorAll('.bubble')];
-  bubbles.forEach((b, i) => {
-    if (endsRun(bubbles, i)) {
-      const isFinalRun = i === bubbles.length - 1;
-      // The final run (if open) is owned by the live avatar; older runs static.
-      if (!isFinalRun) stampStaticAvatar(b);
-    }
-  });
-  // Place/hide the live avatar on the final run.
-  positionLiveAvatar(false);
-}
-
-window.addEventListener('resize', () => rebuildAvatars());
+// Bubble/viewport changes that move bubbles are handled automatically (the
+// avatar is anchored to its bubble in CSS); we only need to ensure the set of
+// avatars is correct, which append/render already do. Resize/font load need no
+// repositioning pass now, but reconcile is cheap and keeps the set correct.
+window.addEventListener('resize', () => reconcileAvatars(false));
 if (document.fonts && document.fonts.ready) {
-  document.fonts.ready.then(() => rebuildAvatars());
+  document.fonts.ready.then(() => reconcileAvatars(false));
 }
 function groupClass(list, i) {
   const m = list[i], prev = list[i - 1], next = list[i + 1];
@@ -191,7 +176,7 @@ function appendBubble(m, { animate = false, animateAvatar = false } = {}) {
       <div class="pay-card-divider"></div>
       <div class="pay-card-cta">Get my spot</div>`;
     messagesEl.appendChild(card);
-    if (!rendering) closeRunBeforeNonAi();
+    if (!rendering) reconcileAvatars(false);
     scrollToBottom();
     return;
   }
@@ -208,7 +193,7 @@ function appendBubble(m, { animate = false, animateAvatar = false } = {}) {
       <div class="pay-card-divider"></div>
       <div class="pay-card-cta">See our members</div>`;
     messagesEl.appendChild(card);
-    if (!rendering) closeRunBeforeNonAi();
+    if (!rendering) reconcileAvatars(false);
     scrollToBottom();
     return;
   }
@@ -218,50 +203,41 @@ function appendBubble(m, { animate = false, animateAvatar = false } = {}) {
   if (animate && m.role === 'user') div.classList.add('animate-in');
   div.textContent = m.text;
   div.dataset.id = m.id;
+
+  // Capture the current run avatar's position BEFORE this bubble shifts layout,
+  // so a same-run slide measures from the true start. (Travel is usually tiny.)
+  let firstRect = null;
+  if (!rendering && m.role === 'ai' && animateAvatar) {
+    const prev = messages[messages.length - 2];
+    const firstOfRun = !prev || prev.role !== 'ai';
+    if (!firstOfRun) {
+      const cur = messagesEl.querySelector('.bubble.ai > .run-avatar');
+      if (cur) firstRect = cur.getBoundingClientRect();
+    }
+  }
+
   messagesEl.appendChild(div);
   refreshGrouping();
 
   if (!rendering) {
-    if (m.role === 'ai') {
-      // First AI bubble of this run? (previous message isn't ai) -> appear with
-      // the bubble, no slide. Otherwise slide the live avatar down.
-      const prev = messages[messages.length - 2];
-      const firstOfRun = !prev || prev.role !== 'ai';
-      positionLiveAvatar(/*animate=*/ !firstOfRun && animateAvatar);
-    } else {
-      closeRunBeforeNonAi();   // user bubble ends the AI run
-    }
+    // One reconcile pass handles every case: new run (create + pop), run growth
+    // (move the avatar, optionally sliding), and a user bubble closing a run
+    // (the avatar simply stays on the now-final AI bubble of the prior run).
+    reconcileAvatars(/*animate=*/ !!firstRect, firstRect);
   }
   scrollToBottom();
 }
 
-// A non-AI bubble (user message or a card) just landed: stamp the AI run that
-// preceded it as a permanent static avatar, and hide the live one.
-function closeRunBeforeNonAi() {
-  if (!amataAvatarUrl) return;
-  const bubbles = [...messagesEl.querySelectorAll('.bubble')];
-  // The just-appended item is a user bubble (or a card, which isn't a .bubble at
-  // all). Scan back to the most recent AI bubble and stamp it. We must skip the
-  // trailing user bubble first, otherwise we'd break on it immediately.
-  let i = bubbles.length - 1;
-  if (i >= 0 && bubbles[i].classList.contains('user')) i--;   // skip the new user bubble
-  for (; i >= 0; i--) {
-    if (bubbles[i].classList.contains('ai')) { stampStaticAvatar(bubbles[i]); break; }
-    if (bubbles[i].classList.contains('user')) break;          // already past the AI run
-  }
-  if (liveAvatar) liveAvatar.classList.remove('show');
-}
-
-// Full render (used once on load).
+// Full render (used once on load). Builds all bubbles, then one reconcile pass
+// attaches exactly one avatar to each run's last bubble.
 function renderAll() {
   messagesEl.innerHTML = '';
-  liveAvatar = null;           // destroyed by innerHTML reset; recreated on demand
   const saved = messages;
   messages = [];
   rendering = true;
   for (const m of saved) appendBubble(m);
   rendering = false;
-  rebuildAvatars();            // single pass: static stamps + live position
+  reconcileAvatars(false);     // single pass: one avatar per run-ender
 }
 
 // --- typing indicator ------------------------------------------------------
