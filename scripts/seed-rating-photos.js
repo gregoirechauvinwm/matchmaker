@@ -16,10 +16,11 @@
 // with the photo's R2 public URL. Nothing else in the feature cares where the
 // images are hosted - it just stores and renders whatever url is here.
 
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../src/db/pool.js';
+import { uploadPoolPhoto, r2Configured } from '../src/lib/r2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const POOL_DIR = join(__dirname, '..', 'public', 'rate', 'pool');
@@ -37,12 +38,28 @@ function filesFor(bucket) {
 async function main() {
   // Build the full insert list from disk first, so we don't wipe the pool if
   // the folders are empty (which would otherwise leave nothing to rate).
+  const useR2 = r2Configured();
+  console.log(useR2
+    ? 'R2 configured -> uploading pool images to R2 and storing their public URLs.'
+    : 'R2 not configured -> storing local /rate/pool/... paths (dev/static mode).');
+
+  const CT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
   const rows = [];
   for (const bucket of BUCKETS) {
     const files = filesFor(bucket);
-    files.forEach((file, i) => {
-      rows.push({ bucket, url: `/rate/pool/${bucket}/${file}`, position: i + 1 });
-    });
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      let url;
+      if (useR2) {
+        // Upload the file to R2 under pool/{bucket}/{file}; store its public URL.
+        const ext = (file.split('.').pop() || 'jpg').toLowerCase();
+        const buffer = readFileSync(join(POOL_DIR, bucket, file));
+        url = await uploadPoolPhoto(bucket, file, buffer, CT[ext] || 'image/jpeg');
+      } else {
+        url = `/rate/pool/${bucket}/${file}`;
+      }
+      rows.push({ bucket, url, position: i + 1 });
+    }
     console.log(`${bucket}: found ${files.length} image(s)`);
   }
 

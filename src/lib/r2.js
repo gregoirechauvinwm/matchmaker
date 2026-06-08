@@ -46,6 +46,20 @@ export async function uploadUserPhoto(userId, dataUrl) {
   return `${publicUrl}/${key}`;
 }
 
+// Upload a rating-pool image buffer under pool/{bucket}/{filename} and return
+// its public URL. Used by the rating-photo seed to move local pool files to R2.
+// Stable key (bucket + filename) so re-running overwrites rather than duplicates.
+export async function uploadPoolPhoto(bucketName, filename, buffer, contentType) {
+  const key = `pool/${bucketName}/${filename}`;
+  await client.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  }));
+  return `${publicUrl}/${key}`;
+}
+
 export function r2Configured() {
   return !!(accountId && bucket && publicUrl && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY);
 }
