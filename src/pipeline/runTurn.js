@@ -19,7 +19,7 @@ import { userContext } from '../lib/users.js';
 import { createPaymentLink } from '../lib/payments.js';
 import { createRatingLink } from '../lib/ratings.js';
 
-function buildContext({ user, task, histories, detection = '', whisperer = '', initialThought = '', parts = {}, outcomes = [] }) {
+function buildContext({ user, task, histories, detection = '', whisperer = '', initialThought = '', parts = {}, outcomes = [], isClosing = false }) {
   const u = userContext(user);
   // outcomes: list of {task_name, status}. Expose as a map for branching, e.g.
   // {% if outcomes['Dating criteria'] == 'accepted' %}. Also the CURRENT task's
@@ -74,6 +74,11 @@ function buildContext({ user, task, histories, detection = '', whisperer = '', i
     // Per-user task outcomes for branching in prompts/task fields.
     outcomes: outcomeMap,
     task_status: taskStatus,
+    // True ONLY on the turn that closes the current task (END_TASK/ACCEPT/REFUSE
+    // or cap-hit). Lets the speaker branch: {% if is_closing %}...{% endif %}.
+    // `end_message` is that task's rendered end_message text, for convenience.
+    is_closing: isClosing,
+    end_message: isClosing ? (renderedTask.end_message || '') : '',
     chat_history: histories.chat_history,
     chat_history_with_whisperer: histories.chat_history_with_whisperer,
   };
@@ -291,6 +296,7 @@ export async function* runTurn({ userId, turnId, openFirstTask = false }) {
       user, task, histories, parts, outcomes: speakerOutcomes,
       detection: detRes.value, whisperer: whispererText,
       initialThought: user.current_task_initial_thought || '',
+      isClosing: closing,
     }),
   });
 
