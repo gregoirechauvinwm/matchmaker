@@ -27,7 +27,11 @@
     .progress { flex: 1 1 auto; height: 4px; background: #E1E1E1; border-radius: 360px; overflow: hidden; }
     .progress > div { height: 100%; background: #C5C5C5; border-radius: 360px; width: 0; transition: width .35s cubic-bezier(.25,.46,.45,.94); }
 
-    .shell { flex: 1 1 auto; position: relative; overflow: hidden; }
+    /* overflow: clip (not just hidden) prevents focus/programmatic scrolling.
+       A field inside an off-screen step (at translateX(100%)) receiving focus
+       would otherwise scroll .shell sideways and push the active step off-screen
+       - hidden does NOT block that, clip does. */
+    .shell { flex: 1 1 auto; position: relative; overflow: hidden; overflow: clip; }
     .step {
       position: absolute; inset: 0; padding: 20px 24px 0;
       display: flex; flex-direction: column;
@@ -52,10 +56,16 @@
       letter-spacing: 0; outline: none; background: transparent; border-radius: 0;
     }
     .field::placeholder { color: #999; }
-    /* intl-tel-input: make it span the row and inherit the underline field look */
-    .phone-row { width: 100%; }
-    .phone-row .iti { width: 100%; }
-    .phone-row .iti input.field { border-radius: 0; }
+    /* intl-tel-input: span the row, inherit the underline field look, and never
+       exceed the container (the fixed slider clips overflow, so a too-wide iti
+       element would shove the page sideways). The country picker uses iti's
+       built-in fullscreen popup on mobile, so it isn't affected by this clip. */
+    .phone-row { width: 100%; max-width: 100%; overflow: hidden; }
+    .phone-row .iti { width: 100%; max-width: 100%; }
+    .phone-row .iti input.field,
+    .phone-row .iti input[type="tel"] {
+      width: 100%; max-width: 100%; box-sizing: border-box; border-radius: 0;
+    }
     .iti__selected-dial-code { font-family: var(--cp); font-size: 22px; }
     .err { font-size: 14px; font-weight: 400; color: #FF3B30; margin: 8px 0 0; min-height: 18px; }
     .field.invalid { border-bottom-color: #FF3B30; }
@@ -362,6 +372,18 @@
     const bottomFootText = document.getElementById('bottom-foot-text');
     let i = 0;
 
+    // Safety net for the slider: a focused field inside an off-screen step can
+    // make the browser scroll .shell sideways (Safari does this even with
+    // overflow:hidden), which pushes the active step off-screen. Pin the shell
+    // (and any accidental window scroll) back to the left whenever it drifts.
+    const shellEl = document.querySelector('.shell');
+    function pinShell() {
+      if (shellEl && shellEl.scrollLeft !== 0) shellEl.scrollLeft = 0;
+      if (window.scrollX !== 0) window.scrollTo(0, window.scrollY);
+    }
+    if (shellEl) shellEl.addEventListener('scroll', pinShell, { passive: true });
+    document.addEventListener('focusin', () => { requestAnimationFrame(pinShell); });
+
     // Steps that use the bottom-stuck footer (non keyboard-input steps that need a button).
     const BOTTOM = { multi: true, agerange: true, photos: true, intro: true, avatar: true };
     // optional footer text per type
@@ -604,14 +626,30 @@
 
     // ---- phone field: country selector (intl-tel-input) + US live format ----
     const phoneEl = document.getElementById('f-phone');
-    // US default, full searchable country dropdown with flags + dial code.
-    const iti = window.intlTelInput(phoneEl, {
-      initialCountry: 'us',
-      separateDialCode: true,
-      utilsScript: 'https://cdn.jsdelivr.net/npm/intl-tel-input@24.6.0/build/js/utils.js',
-    });
-    window._itiPhone = iti;
+    // Guard the whole iti setup: if the CDN is slow or blocked, window.intlTelInput
+    // is undefined and would throw here - which previously killed the rest of the
+    // init (including show(0)) and left the first step shifted off-screen. Now a
+    // failure degrades gracefully to a plain phone input.
+    let iti = null;
+    try {
+      if (typeof window.intlTelInput === 'function') {
+        iti = window.intlTelInput(phoneEl, {
+          initialCountry: 'us',
+          separateDialCode: true,
+          // Let intl-tel-input use its built-in fullscreen country picker on
+          // mobile. It is designed to escape constrained/fixed layouts like this
+          // slider, which is exactly our situation - fighting it with an inline
+          // dropdown caused the page to shift. Defaults handle this correctly.
+          countrySearch: true,
+          utilsScript: 'https://cdn.jsdelivr.net/npm/intl-tel-input@24.6.0/build/js/utils.js',
+        });
+        window._itiPhone = iti;
+      }
+    } catch (e) {
+      iti = null;   // fall back to plain input + US validation
+    }
     function selectedCountry() {
+      if (!iti || typeof iti.getSelectedCountryData !== 'function') return 'US';
       return (iti.getSelectedCountryData().iso2 || 'us').toUpperCase();
     }
     // Live formatting xxx-xxx-xxxx ONLY for US. Other countries: plain digits,
