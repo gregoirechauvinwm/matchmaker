@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Scroll-behind test</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    /* Hard-locked page: never scrolls; the message list is the ONLY scroller. */
+    html, body {
+      margin: 0; padding: 0;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+      font-family: -apple-system, system-ui, sans-serif;
+      background: #fff;
+    }
+
+    /* App shell fills the viewport. interactive-widget=resizes-content (set via
+       the meta below) makes the keyboard resize this instead of overlapping. */
+    .app {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Fixed header (does not scroll). */
+    .header {
+      flex: 0 0 auto;
+      height: 60px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600;
+      background: transparent;
+      padding-top: env(safe-area-inset-top);
+    }
+
+    /* THE SCROLLER. It fills all remaining space (flex:1). Crucially it extends
+       ALL THE WAY to the bottom of the shell - the input bar is NOT a flex child
+       taking space; it OVERLAYS. So messages scroll in the full area, including
+       the region behind the bar. The bottom padding lets the last message rise
+       above the bar instead of being hidden under it. */
+    .scroller {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      padding: 12px 16px 80px;   /* 80px bottom clears the overlay bar */
+    }
+
+    .msgs { display: flex; flex-direction: column; gap: 8px; }
+
+    .bubble {
+      max-width: 78%;
+      padding: 9px 13px;
+      font-size: 17px;
+      line-height: 1.3;
+      border-radius: 18px;
+      word-wrap: break-word;
+    }
+    .ai   { align-self: flex-start; background: #e9e9eb; color: #1c1c1e; }
+    .user { align-self: flex-end;   background: #0b93f6; color: #fff; }
+
+    /* Fixed input bar OVERLAYING the bottom of the shell. Because it is
+       position:fixed (not a flex child), the scroller occupies the area behind
+       it, and messages scroll behind the translucent pill.
+       The gradient scrim fades from transparent (top) to solid white (bottom)
+       so messages fade out into white right where Safari's chrome begins -
+       merging cleanly with Safari's white URL/keyboard bars. */
+    .inputbar {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      z-index: 10;
+      /* extra top padding gives the gradient room for a gradual fade */
+      padding: 36px 12px calc(8px + env(safe-area-inset-bottom));
+      background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0) 0%,
+        rgba(255,255,255,0.85) 45%,
+        rgba(255,255,255,1) 75%,
+        rgba(255,255,255,1) 100%
+      );
+      pointer-events: none;          /* let touches pass except on the pill */
+    }
+    .pill {
+      pointer-events: auto;          /* re-enable on the pill itself */
+      display: flex; align-items: flex-end; gap: 6px;
+      border-radius: 22px;
+      padding: 5px 5px 5px 14px;
+      background: rgba(242, 242, 242, 0.8);
+      border: 1px solid #fff;
+      box-shadow: 0px -5px 50px 10px rgba(0,0,0,0.10);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    }
+    .pill textarea {
+      flex: 1; resize: none; border: none; outline: none; background: transparent;
+      font-size: 16px; font-family: inherit; line-height: 1.3;
+      max-height: 120px; padding: 7px 0; color: #1c1c1e;
+    }
+    .pill button {
+      width: 30px; height: 30px; flex-shrink: 0; border: none; border-radius: 50%;
+      background: #0b93f6; color: #fff; font-size: 16px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">Scroll-behind test</div>
+
+    <main class="scroller" id="scroller">
+      <div class="msgs" id="msgs"></div>
+    </main>
+
+    <div class="inputbar">
+      <div class="pill">
+        <textarea id="ta" rows="1" placeholder="Message"></textarea>
+        <button id="add">+</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Set the interactive-widget hint (keyboard resizes content, not overlaps).
+    const vp = document.querySelector('meta[name=viewport]');
+    vp.setAttribute('content', vp.getAttribute('content') + ', interactive-widget=resizes-content');
+
+    const msgs = document.getElementById('msgs');
+    const scroller = document.getElementById('scroller');
+    const ta = document.getElementById('ta');
+
+    // Seed with enough messages to force scrolling.
+    const seed = [];
+    for (let i = 1; i <= 25; i++) {
+      seed.push({ role: i % 2 ? 'ai' : 'user', text: 'Message ' + i + ' — scroll up and down. The last messages should slide behind the input pill, and the page itself must not move when you drag.' });
+    }
+    function render() {
+      msgs.innerHTML = seed.map(m => `<div class="bubble ${m.role}">${m.text}</div>`).join('');
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+    render();
+
+    document.getElementById('add').addEventListener('mousedown', e => e.preventDefault());
+    document.getElementById('add').addEventListener('click', () => {
+      seed.push({ role: 'user', text: ta.value || 'New message ' + (seed.length + 1) });
+      ta.value = '';
+      render();
+      ta.focus();   // keep keyboard up
+    });
+  </script>
+</body>
+</html>

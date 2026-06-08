@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <title>Scroll test</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%;
+      position: fixed; inset: 0; width: 100%;
+      overflow: hidden; overscroll-behavior: none;
+      font-family: -apple-system, system-ui, sans-serif;
+    }
+    .wrap { padding: 60px 24px 0; }
+    p { font-size: 17px; margin: 0 0 30px; }
+    input {
+      width: 100%; font-size: 22px; padding: 12px 0 12px 8px;
+      border: none; border-bottom: 1px solid #000; outline: none; border-radius: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p>Tap the field.</p>
+    <input type="text" placeholder="Type here" />
+  </div>
+</body>
+</html>

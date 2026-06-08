@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>My Amata</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Covered+By+Your+Grace&family=Crimson+Pro:wght@400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/chat.css" />
+</head>
+<body class="chat-body">
+  <!-- Hard-locked layout (proven on iOS Safari): header + input are fixed, the
+       message list is the only scroller. No JS viewport chasing. -->
+  <header class="chat-header" id="chat-header">
+    <div class="chat-avatar" id="chat-avatar">M</div>
+    <div class="chat-name" id="persona-name">My Amata</div>
+  </header>
+
+  <main class="chat-list" id="chat-list">
+    <div class="chat-messages" id="chat-messages"></div>
+  </main>
+
+  <div class="chat-inputbar" id="chat-inputbar">
+    <div class="composer-pill" id="composer-pill">
+      <textarea id="composer" class="composer" rows="1" placeholder="Message"
+                autocomplete="off" autocorrect="on" autocapitalize="sentences"
+                spellcheck="true" name="mm_message"></textarea>
+      <button id="send-btn" class="send-btn" aria-label="Send" tabindex="-1">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+             stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="20" x2="12" y2="5"></line>
+          <polyline points="6 11 12 5 18 11"></polyline>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <script src="/chat.js"></script>
+</body>
+</html>

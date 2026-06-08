@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <title>Form proto</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;400;600&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    :root { --cp: "Crimson Pro", Georgia, serif; }
+    html, body {
+      margin: 0; height: 100%;
+      font-family: var(--cp); background: #fff; color: #000;
+      -webkit-text-size-adjust: 100%;
+      position: fixed; inset: 0; width: 100%; overflow: hidden; overscroll-behavior: none;
+    }
+    .app { display: flex; flex-direction: column; height: 100dvh; height: 100vh; height: 100dvh; overflow: hidden; }
+
+    .topnav { flex: 0 0 auto; padding: calc(10px + env(safe-area-inset-top)) 20px 0; display: flex; align-items: center; gap: 14px; }
+    .back { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; cursor: pointer; background: none; border: none; padding: 0; }
+    .back svg { width: 17px; height: 17px; }
+
+    .progress { flex: 1 1 auto; height: 4px; background: #E1E1E1; border-radius: 360px; overflow: hidden; }
+    .progress > div { height: 100%; background: #C5C5C5; border-radius: 360px; width: 0; transition: width .35s cubic-bezier(.25,.46,.45,.94); }
+
+    .shell { flex: 1 1 auto; position: relative; overflow: hidden; }
+    .step {
+      position: absolute; inset: 0; padding: 20px 24px 0;
+      display: flex; flex-direction: column;
+      transform: translateX(100%); opacity: 0;
+      transition: transform .32s cubic-bezier(.33,1,.68,1), opacity .25s ease;
+      pointer-events: none; overflow: hidden;
+    }
+    /* Only steps with long option lists may scroll; input steps stay fixed. */
+    .step[data-type="multi"], .step[data-type="avatar"] { overflow-y: auto; }
+    .step.active { transform: translateX(0); opacity: 1; pointer-events: auto; }
+    .step.left { transform: translateX(-100%); opacity: 0; }
+
+    /* 40px between progress, title-block, and input-block */
+    .title-block { margin-bottom: 20px; }
+    .title { font-size: 30px; font-weight: 400; letter-spacing: 0; line-height: 1.15; margin: 0; }
+    .para { font-size: 17px; font-weight: 400; letter-spacing: -0.004em; margin: 14px 0 0; }
+
+    .field {
+      width: 100%; border: none; border-bottom: 1px solid #000;
+      padding: 12px 0 12px 8px;
+      font-family: var(--cp); font-size: 22px; font-weight: 400; color: #000;
+      letter-spacing: 0; outline: none; background: transparent; border-radius: 0;
+    }
+    .field::placeholder { color: #999; }
+    .err { font-size: 14px; font-weight: 400; color: #FF3B30; margin: 8px 0 0; min-height: 18px; }
+    .field.invalid { border-bottom-color: #FF3B30; }
+
+    .opts { display: flex; flex-direction: column; gap: 12px; }
+    .opt {
+      background: #DFDFDF; border: none; border-radius: 360px;
+      font-family: var(--cp); font-size: 22px; font-weight: 300; color: #000;
+      padding: 14px 22px; text-align: center; cursor: pointer;
+    }
+    .opt.selected { outline: 2px solid #000; }
+
+    .chk {
+      display: flex; align-items: center; justify-content: center; gap: 14px;
+      background: #fff; border: 1px solid #E1E1E1; border-radius: 360px;
+      font-family: var(--cp); font-size: 22px; font-weight: 300; color: #7C8588;
+      padding: 13px 20px; cursor: pointer; position: relative;
+    }
+    .chk .box { width: 22px; height: 22px; border: 1px solid #000; border-radius: 4px; background: #fff;
+      flex-shrink: 0; display: grid; place-items: center; position: absolute; left: 20px; }
+    .chk .box svg { display: none; }
+    .chk.selected { color: #000; border-color: #000; }
+    .chk.selected .box { background: #000; }
+    .chk.selected .box svg { display: block; }
+
+    /* input-block (sits right under field, in-flow) */
+    .field-error { font-family: var(--cp); font-weight: 400; color: #FF3B30; font-size: 14px; margin: 8px 0 0; min-height: 18px; }
+
+    .input-foot { margin-top: 20px; }
+    .input-foot .foot-text { margin: 12px 0 0; }
+
+    /* bottom-stuck footer (non-input steps) */
+    .bottom-foot { flex: 0 0 auto; padding: 14px 24px calc(20px + env(safe-area-inset-bottom)); }
+    .bottom-foot.hidden { display: none; }
+
+    .foot-text { font-size: 16px; text-align: center; margin: 12px 0 0; }
+    .btn {
+      width: 100%; border: none; border-radius: 360px;
+      font-family: var(--cp); font-size: 22px; font-weight: 600; letter-spacing: 0;
+      padding: 15px; cursor: pointer; background: #000; color: #FFF9F1;
+    }
+    .btn:disabled { background: #EFEFF0; color: rgba(60,60,67,0.3); cursor: default; }
+
+    /* segmented inputs (birth, code) */
+    .segments { display: flex; gap: 12px; }
+    .seg { text-align: center; }
+    .seg.code { flex: 1; padding-left: 0; }
+
+    .range-label { font-size: 22px; margin: 0 0 20px; }
+    .dual { position: relative; height: 28px; }
+    .dual-track { position: absolute; top: 12px; left: 0; right: 0; height: 4px; background: #E1E1E1; border-radius: 360px; }
+    .dual-fill { position: absolute; top: 12px; height: 4px; background: #000; border-radius: 360px; }
+    .dual input[type=range] { position: absolute; top: 0; left: 0; width: 100%; height: 28px; margin: 0; background: none; pointer-events: none; -webkit-appearance: none; appearance: none; }
+    .dual input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; pointer-events: auto; width: 26px; height: 26px; border-radius: 50%; background: #000; border: none; cursor: pointer; }
+    .dual input[type=range]::-moz-range-thumb { pointer-events: auto; width: 26px; height: 26px; border-radius: 50%; background: #000; border: none; }
+
+    .photo-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    .photo-cell { border: 1px solid #a8a8a8; border-radius: 10px; position: relative; overflow: hidden; display: grid; place-items: center; background: #fff; }
+    .photo-grid.two .photo-cell { width: 134px; height: 176px; }
+    .photo-grid.six .photo-cell { width: 101px; height: 132px; }
+    .photo-cell.dashed { border-style: dashed; }
+    .photo-cell img { width: 100%; height: 100%; object-fit: cover; }
+    .photo-add { border-radius: 50%; background: #DFDFDF; border: none; cursor: pointer; display: grid; place-items: center; }
+    .photo-grid.two .photo-add { width: 42px; height: 42px; }
+    .photo-grid.six .photo-add { width: 32px; height: 32px; }
+
+    .avatar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; justify-items: center; }
+    .avatar { width: 95px; height: 95px; border-radius: 50%; position: relative; cursor: pointer; }
+    .avatar .ph { width: 95px; height: 95px; border-radius: 50%; display: block; }
+    .avatar.selected .ph { box-shadow: inset 0 0 0 3px #6474ff; }
+    .avatar .check { position: absolute; bottom: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; background: #6474ff; display: none; place-items: center; border: 2px solid #fff; }
+    .avatar.selected .check { display: grid; }
+
+    .intro-img { width: 100%; max-width: 280px; height: 300px; margin: 0 auto; border-radius: 16px; background: linear-gradient(135deg,#e8e0d0,#cfc3aa); }
+    .gen-img { width: 220px; height: 220px; margin: 30px auto 0; border-radius: 50%; background: linear-gradient(135deg,#a98bd6,#6f57c2); box-shadow: 0 0 0 6px rgba(100,116,255,.35), 0 0 0 12px rgba(100,116,255,.18); animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topnav">
+      <button class="back" id="back" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="progress"><div id="bar"></div></div>
+    </div>
+
+    <div class="shell" id="shell">
+      <!-- 1 phone -->
+      <section class="step" data-type="input" data-focus="f-phone">
+        <div class="title-block">
+          <p class="title">What's your phone number?</p>
+          <p class="para">We will send you a verification code on this number. We make sure our users are real people.</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div class="field" style="width:78px;flex:0 0 auto">US +1</div>
+          <input class="field" id="f-phone" type="tel" inputmode="numeric" placeholder="" style="flex:1" />
+        </div>
+        <p class="field-error" id="err-phone"></p>
+        <p class="err" id="err-phone"></p>
+        <div class="input-foot">
+          <button class="btn step-next" disabled>Verify phone number</button>
+          <p class="foot-text">🔒 Your number will never be shared with anyone</p>
+        </div>
+      </section>
+
+      <!-- 2 code (6 segments) -->
+      <section class="step" data-type="code">
+        <div class="title-block">
+          <p class="title">Enter the code you received</p>
+          <p class="para">Sent to your number</p>
+        </div>
+        <div class="segments" id="code-segs">
+          <input class="field seg code" inputmode="numeric" maxlength="1" />
+          <input class="field seg code" inputmode="numeric" maxlength="1" />
+          <input class="field seg code" inputmode="numeric" maxlength="1" />
+          <input class="field seg code" inputmode="numeric" maxlength="1" />
+          <input class="field seg code" inputmode="numeric" maxlength="1" />
+          <input class="field seg code" inputmode="numeric" maxlength="1" />
+        </div>
+        <p class="field-error" id="err-code"></p>
+        <p class="err" id="err-code"></p>
+        <div class="input-foot">
+          <p class="foot-text">You should receive the code within 30s<br><u>Didn't receive the code?</u></p>
+        </div>
+      </section>
+
+      <!-- 3 email -->
+      <section class="step" data-type="input" data-focus="f-email">
+        <div class="title-block">
+          <p class="title">What's your email address?</p>
+          <p class="para">It can be used to recover access to your account later.</p>
+        </div>
+        <input class="field" id="f-email" type="email" inputmode="email" placeholder="Email address" autocomplete="email" />
+        <p class="field-error" id="err-email"></p>
+        <p class="err" id="err-email"></p>
+        <div class="input-foot"><button class="btn step-next" disabled>Continue</button></div>
+      </section>
+
+      <!-- 4 birth date (dd mm yyyy, auto-advance) -->
+      <section class="step" data-type="birth">
+        <div class="title-block"><p class="title">What's your birth date?</p></div>
+        <div class="segments">
+          <input class="field seg" id="b-dd" inputmode="numeric" maxlength="2" placeholder="dd">
+          <input class="field seg" id="b-mm" inputmode="numeric" maxlength="2" placeholder="mm">
+          <input class="field seg" id="b-yyyy" inputmode="numeric" maxlength="4" placeholder="yyyy">
+        </div>
+        <p class="field-error" id="err-birth"></p>
+        <p class="err" id="err-birth"></p>
+        <div class="input-foot"><button class="btn step-next" disabled>Continue</button></div>
+      </section>
+
+      <!-- 5 name -->
+      <section class="step" data-focus="f-name" data-type="input">
+        <div class="title-block">
+          <p class="title">What's your name?</p>
+          <p class="para">Your first name can not be changed later.</p>
+        </div>
+        <input class="field" id="f-name" type="text" inputmode="text" placeholder="First name" autocomplete="given-name" />
+        <p class="field-error" id="err-name"></p>
+        <p class="err" id="err-name"></p>
+        <div class="input-foot">
+          <button class="btn step-next" disabled>Continue</button>
+          <p class="foot-text">Visible by other users</p>
+        </div>
+      </section>
+
+      <!-- 6 identify -->
+      <section class="step" data-type="single">
+        <div class="title-block"><p class="title">How do you identify?</p></div>
+        <div class="opts" data-single>
+          <button class="opt">I am a woman</button>
+          <button class="opt">I am a man</button>
+          <button class="opt">I am non-binary</button>
+        </div>
+      </section>
+
+      <!-- 7 who to meet -->
+      <section class="step" data-type="multi">
+        <div class="title-block"><p class="title">Who do you want<br>to meet?</p></div>
+        <div class="opts" data-multi>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Women</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Men</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Non-binaries</div>
+        </div>
+      </section>
+
+      <!-- 8 their age -->
+      <section class="step" data-type="agerange">
+        <div class="title-block">
+          <p class="title">How old should<br>they be?</p>
+          <p class="para">Select the ideal age range for your partner. We ask for a minimum 5-year range.</p>
+        </div>
+        <p class="range-label">Between <span id="age-lo">18</span> and <span id="age-hi">35</span></p>
+        <div class="dual" id="dual">
+          <div class="dual-track"></div>
+          <div class="dual-fill" id="dual-fill"></div>
+          <input type="range" id="age-min" min="18" max="75" value="18" />
+          <input type="range" id="age-max" min="18" max="75" value="35" />
+        </div>
+      </section>
+
+      <!-- 9 education -->
+      <section class="step" data-type="single">
+        <div class="title-block"><p class="title">What is your<br>education level?</p></div>
+        <div class="opts" data-single>
+          <button class="opt">High school / Secondary school</button>
+          <button class="opt">Undergrad</button>
+          <button class="opt">Postgrad</button>
+          <button class="opt">Prefer not to say</button>
+        </div>
+      </section>
+
+      <!-- 10 children -->
+      <section class="step" data-type="single">
+        <div class="title-block"><p class="title">Do you have<br>children already?</p></div>
+        <div class="opts" data-single>
+          <button class="opt">Don't have children</button>
+          <button class="opt">Have children</button>
+        </div>
+      </section>
+
+      <!-- 11 ethnicity -->
+      <section class="step" data-type="multi">
+        <div class="title-block"><p class="title">What's your ethnicity?</p></div>
+        <div class="opts" data-multi>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Black/African Descent</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Caucasian/White</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>East Asian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Hispanic/Latino</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Middle Eastern</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Native American</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Pacific Islander</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>South Asian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Southeast Asian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Indian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Other</div>
+        </div>
+      </section>
+
+      <!-- 12 religion -->
+      <section class="step" data-type="multi">
+        <div class="title-block"><p class="title">What are your<br>religious beliefs?</p></div>
+        <div class="opts" data-multi>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Agnostic</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Atheist</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Buddhist</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Catholic</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Christian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Hindu</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Jewish</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Muslim</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Sikh</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Spiritual</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Other</div>
+        </div>
+      </section>
+
+      <!-- 13 photos -->
+      <section class="step" data-type="photos">
+        <div class="title-block">
+          <p class="title">Add at least<br>2 photos of you</p>
+          <p class="para" id="photo-sub" style="display:none">It will increase your chances of getting intros.</p>
+        </div>
+        <div class="photo-grid two" id="photo-grid"></div>
+      </section>
+
+      <!-- 14 amata intro -->
+      <section class="step" data-type="intro">
+        <div class="title-block"><p class="title">Now let's create your<br>AI matchmaker</p></div>
+        <div class="intro-img"></div>
+      </section>
+
+      <!-- 15 choose amata -->
+      <section class="step" data-type="avatar">
+        <div class="title-block"><p class="title">Choose your AI matchmaker<br>We call them "Amatas"</p></div>
+        <div class="avatar-grid" id="avatar-grid"></div>
+      </section>
+
+      <!-- 16 generating -->
+      <section class="step" data-type="generating">
+        <div class="title-block"><p class="title">Generating your<br>Amata ...</p></div>
+        <div class="gen-img"></div>
+      </section>
+    </div>
+
+    <!-- shared bottom-stuck footer (non-input steps) -->
+    <div class="bottom-foot hidden" id="bottom-foot">
+      <button class="btn" id="bottom-next" disabled>Continue</button>
+      <p class="foot-text" id="bottom-foot-text"></p>
+    </div>
+  </div>
+
+  <!-- under-18 rejection overlay -->
+  <div id="under18" style="display:none;position:fixed;inset:0;background:#fff;z-index:100;flex-direction:column;align-items:center;justify-content:center;padding:0 40px;text-align:center">
+    <p style="font-family:var(--cp);font-size:30px;font-weight:400;margin:0 0 20px">Sorry, you must be over 18 to use the app</p>
+    <button id="under18-back" style="font-family:var(--cp);font-size:16px;background:none;border:none;text-decoration:underline;cursor:pointer">Made a mistake in your birth date?</button>
+  </div>
+
+  <script>
+    const steps = [...document.querySelectorAll('.step')];
+    const bar = document.getElementById('bar');
+    const bottomFoot = document.getElementById('bottom-foot');
+    const bottomNext = document.getElementById('bottom-next');
+    const bottomFootText = document.getElementById('bottom-foot-text');
+    let i = 0;
+
+    // Steps that use the bottom-stuck footer (non keyboard-input steps that need a button).
+    const BOTTOM = { multi: true, agerange: true, photos: true, intro: true, avatar: true };
+    // optional footer text per type
+    const FOOT = { agerange: 'Not visible by other users', photos: 'It will increase your chances of getting intros.', intro: 'Our AI is not perfect yet. It can have some glitches. Never share sensitive data.' };
+
+    function show(n, focusNow) {
+      steps.forEach((s, idx) => {
+        s.classList.toggle('active', idx === n);
+        s.classList.toggle('left', idx < n);
+      });
+      bar.style.width = ((n + 1) / steps.length * 100) + '%';
+
+      const type = steps[n].dataset.type;
+      const useBottom = !!BOTTOM[type];
+      bottomFoot.classList.toggle('hidden', !useBottom);
+      bottomFootText.textContent = FOOT[type] || '';
+      bottomFootText.style.display = FOOT[type] ? 'block' : 'none';
+
+      validate();
+
+      const focusId = steps[n].dataset.focus;
+      if (focusId) {
+        const el = document.getElementById(focusId);
+        if (focusNow) el.focus(); else setTimeout(() => el.focus(), 350);
+      } else if (type === 'birth') {
+        const el = document.getElementById('b-dd');
+        if (focusNow) el.focus(); else setTimeout(() => el.focus(), 350);
+      } else if (type === 'code') {
+        const el = steps[n].querySelector('.seg.code');
+        if (focusNow) el.focus(); else setTimeout(() => el.focus(), 350);
+      } else if (type === 'generating') {
+        setTimeout(() => alert('Done (proto) — would now enter chat'), 2500);
+      }
+    }
+
+    function stepValid(s) {
+      const type = s.dataset.type;
+      const focusId = s.dataset.focus;
+      if (type === 'birth') {
+        return document.getElementById('b-dd').value.length>=1 && document.getElementById('b-mm').value.length>=1 && document.getElementById('b-yyyy').value.length===4;
+      }
+      if (type === 'code') return [...s.querySelectorAll('.seg.code')].every(x => x.value.length === 1);
+      if (focusId) return document.getElementById(focusId).value.trim().length > 0;
+      if (type === 'multi') return !!s.querySelector('.chk.selected');
+      if (type === 'agerange' || type === 'intro') return true;
+      if (type === 'photos') return s.querySelectorAll('.photo-cell img').length >= 2;
+      if (type === 'avatar') return !!s.querySelector('.avatar.selected');
+      return false;
+    }
+
+    function validate() {
+      const s = steps[i]; const ok = stepValid(s);
+      const inlineBtn = s.querySelector('.step-next');
+      if (inlineBtn) inlineBtn.disabled = !ok;
+      if (BOTTOM[s.dataset.type]) bottomNext.disabled = !ok;
+    }
+
+    // Format validation — returns an error string, or null if valid. Runs only
+    // when the user clicks an enabled Continue (or auto-advance fires).
+    function formatError(s) {
+      const type = s.dataset.type;
+      if (type === 'input' && s.dataset.focus === 'f-phone') {
+        const digits = document.getElementById('f-phone').value.replace(/\D/g,'');
+        if (digits.length !== 10) return 'Enter a valid 10-digit phone number';
+        return null;
+      }
+      if (type === 'code') {
+        // Real validation happens server-side (Twilio) later. For the proto,
+        // accept any 6 digits.
+        const code = [...s.querySelectorAll('.seg.code')].map(x=>x.value).join('');
+        if (!/^\d{6}$/.test(code)) return 'The verification code you entered is not valid';
+        return null;
+      }
+      if (s.dataset.focus === 'f-email') {
+        const v = document.getElementById('f-email').value.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'This is not a valid email address';
+        return null;
+      }
+      if (s.dataset.focus === 'f-name') {
+        if (document.getElementById('f-name').value.trim().length < 2) return 'Please enter at least 2 characters';
+        return null;
+      }
+      if (type === 'birth') {
+        const dd=+document.getElementById('b-dd').value, mm=+document.getElementById('b-mm').value, yy=+document.getElementById('b-yyyy').value;
+        if (!(dd>=1&&dd<=31)) return 'Enter a valid day (1–31)';
+        if (!(mm>=1&&mm<=12)) return 'Enter a valid month (1–12)';
+        if (!(yy>=1910&&yy<=2026)) return 'Enter a valid year (1910–2026)';
+        return null;
+      }
+      return null;
+    }
+
+    function ageFrom(dd,mm,yy) {
+      const today = new Date();
+      let age = today.getFullYear() - yy;
+      const hadBirthday = (today.getMonth()+1 > mm) || (today.getMonth()+1===mm && today.getDate()>=dd);
+      if (!hadBirthday) age--;
+      return age;
+    }
+
+    function showError(s, msg) {
+      const el = s.querySelector('.field-error');
+      if (el) el.textContent = msg || '';
+    }
+    function clearErrors() { document.querySelectorAll('.field-error').forEach(e=>e.textContent=''); }
+
+    function advance() {
+      const s = steps[i];
+      // run format validation before advancing
+      const err = formatError(s);
+      if (err) { showError(s, err); return; }
+      // under-18 gate on birth date
+      if (s.dataset.type === 'birth') {
+        const dd=+document.getElementById('b-dd').value, mm=+document.getElementById('b-mm').value, yy=+document.getElementById('b-yyyy').value;
+        if (ageFrom(dd,mm,yy) < 18) { document.getElementById('under18').style.display='flex'; return; }
+      }
+      showError(s, '');
+      if (i < steps.length - 1) { i++; show(i); }
+      else alert('Done (proto)');
+    }
+
+    // generic field listeners
+    document.querySelectorAll('.field').forEach(f => f.addEventListener('input', () => {
+      validate();
+      const st = f.closest('.step'); if (st) showError(st, '');
+    }));
+    document.querySelectorAll('.step-next').forEach(b => b.addEventListener('click', () => { if (!b.disabled) advance(); }));
+    bottomNext.addEventListener('click', () => { if (!bottomNext.disabled) advance(); });
+
+    // ---- US phone live formatting xxx-xxx-xxxx ----
+    const phoneEl = document.getElementById('f-phone');
+    phoneEl.addEventListener('input', () => {
+      let d = phoneEl.value.replace(/\D/g,'').slice(0,10);
+      let out = d;
+      if (d.length > 6) out = d.slice(0,3)+'-'+d.slice(3,6)+'-'+d.slice(6);
+      else if (d.length > 3) out = d.slice(0,3)+'-'+d.slice(3);
+      phoneEl.value = out;
+    });
+
+    // ---- birth date auto-advance between fields ----
+    const bDD = document.getElementById('b-dd'), bMM = document.getElementById('b-mm'), bYYYY = document.getElementById('b-yyyy');
+    bDD.addEventListener('input', () => { if (bDD.value.length === 2) bMM.focus(); });
+    bMM.addEventListener('input', () => { if (bMM.value.length === 2) bYYYY.focus(); });
+    bYYYY.addEventListener('input', () => { if (bYYYY.value.length === 4 && stepValid(steps[i])) advance(); });
+
+    // ---- code 6-segment auto-advance ----
+    const codeSegs = [...document.querySelectorAll('.seg.code')];
+    codeSegs.forEach((seg, idx) => {
+      seg.addEventListener('input', () => {
+        if (seg.value.length === 1) {
+          if (idx < codeSegs.length - 1) codeSegs[idx + 1].focus();
+          else if (stepValid(steps[i])) advance();   // 6th digit -> next step
+        }
+        validate();
+      });
+      seg.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !seg.value && idx > 0) codeSegs[idx - 1].focus();
+      });
+    });
+
+    // single select
+    document.querySelectorAll('[data-single] .opt').forEach(o => o.addEventListener('click', () => {
+      o.parentElement.querySelectorAll('.opt').forEach(x => x.classList.remove('selected'));
+      o.classList.add('selected'); advance();
+    }));
+    // multi
+    document.querySelectorAll('[data-multi] .chk').forEach(c => c.addEventListener('click', () => {
+      c.classList.toggle('selected'); validate();
+    }));
+
+    // ---- age range ----
+    const ageMin = document.getElementById('age-min'), ageMax = document.getElementById('age-max');
+    const fillEl = document.getElementById('dual-fill'), loLbl = document.getElementById('age-lo'), hiLbl = document.getElementById('age-hi');
+    const MIN=18, MAX=75, GAP=5;
+    function renderRange() {
+      let lo=+ageMin.value, hi=+ageMax.value;
+      if (hi-lo<GAP) { if (document.activeElement===ageMin){lo=hi-GAP;ageMin.value=lo;} else {hi=lo+GAP;ageMax.value=hi;} }
+      const span=MAX-MIN;
+      fillEl.style.left=((lo-MIN)/span*100)+'%'; fillEl.style.width=((hi-lo)/span*100)+'%';
+      loLbl.textContent=lo; hiLbl.textContent=hi>=MAX?MAX+'+':hi;
+    }
+    ageMin.addEventListener('input', renderRange); ageMax.addEventListener('input', renderRange); renderRange();
+
+    // ---- photos ----
+    const photoGrid = document.getElementById('photo-grid'), photoSub = document.getElementById('photo-sub');
+    const photos = [];
+    const fileInput = document.createElement('input');
+    fileInput.type='file'; fileInput.accept='image/*'; fileInput.multiple=true; fileInput.style.display='none'; document.body.appendChild(fileInput);
+    fileInput.addEventListener('change', () => {
+      const files = [...fileInput.files];
+      if (!files.length) return;
+      // Read sequentially to preserve picked order, cap at 6 total.
+      let idx = 0;
+      (function readNext() {
+        if (idx >= files.length || photos.length >= 6) { renderPhotos(); fileInput.value=''; return; }
+        const r = new FileReader();
+        r.onload = () => { photos.push(r.result); idx++; readNext(); };
+        r.readAsDataURL(files[idx]);
+      })();
+    });
+    function plus(big){ const sz=big?20:16; return '<button class="photo-add"><svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>'; }
+    function renderPhotos() {
+      const many=photos.length>=2;
+      photoGrid.className='photo-grid '+(many?'six':'two');
+      photoSub.style.display=many?'block':'none';
+      const total=many?6:2;
+      let html='';
+      for (let k=0;k<total;k++){ html += photos[k] ? '<div class="photo-cell"><img src="'+photos[k]+'"></div>' : '<div class="photo-cell dashed">'+plus(!many)+'</div>'; }
+      photoGrid.innerHTML=html;
+      photoGrid.querySelectorAll('.photo-add').forEach(b=>b.addEventListener('click',()=>fileInput.click()));
+      validate();
+    }
+    renderPhotos();
+
+    // ---- avatars ----
+    const avatarGrid = document.getElementById('avatar-grid');
+    let ah='';
+    for (let k=0;k<9;k++){ ah += '<div class="avatar"><div class="ph" style="background:hsl('+(k*40)+',70%,60%)"></div><span class="check"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span></div>'; }
+    avatarGrid.innerHTML=ah;
+    avatarGrid.querySelectorAll('.avatar').forEach(a=>a.addEventListener('click',()=>{
+      avatarGrid.querySelectorAll('.avatar').forEach(x=>x.classList.remove('selected')); a.classList.add('selected'); validate();
+    }));
+
+    document.getElementById('back').addEventListener('click', () => { if (i>0){i--;show(i);} });
+    document.getElementById('under18-back').addEventListener('click', () => {
+      document.getElementById('under18').style.display='none';
+      // go back to the birth step
+      const bi = steps.findIndex(s => s.dataset.type === 'birth');
+      if (bi >= 0) { i = bi; show(i); }
+    });
+
+    show(0, true);
+  </script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "name": "matchmaker",
+  "version": "0.1.0",
+  "description": "AI matchmaker - local v1",
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:init": "node scripts/init-db.js",
+    "seed:prompts": "node scripts/seed-prompts.js",
+    "seed:tasks": "node scripts/seed-tasks.js",
+    "migrate:tokens": "node scripts/migrate-tokens.js",
+    "migrate:profile": "node scripts/migrate-profile.js",
+    "migrate:initial-thought": "node scripts/migrate-initial-thought.js",
+    "migrate:result-seq": "node scripts/migrate-result-seq.js",
+    "migrate:result-task": "node scripts/migrate-result-task.js",
+    "migrate:app-config": "node scripts/migrate-app-config.js",
+    "migrate:task-types": "node scripts/migrate-task-types.js",
+    "migrate:task-instances": "node scripts/migrate-task-instances.js",
+    "migrate:token-count": "node scripts/migrate-token-count.js",
+    "migrate:scripted-lines": "node scripts/migrate-scripted-lines.js",
+    "migrate:payment-links": "node scripts/migrate-payment-links.js",
+    "migrate:ratings": "node scripts/migrate-ratings.js",
+    "migrate:rate-lines": "node scripts/migrate-rate-lines.js",
+    "seed:rating-photos": "node scripts/seed-rating-photos.js",
+    "migrate:all": "node scripts/migrate-all.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1061.0",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/static": "^8.0.4",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "libphonenumber-js": "^1.11.17",
+    "nunjucks": "^3.2.4",
+    "openai": "^4.77.0",
+    "pg": "^8.13.1",
+    "stripe": "^22.2.0"
+  }
+}

@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Secure your spot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet" />
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    :root {
+      --cp: "Crimson Pro", Georgia, serif;
+      --green: #24B93C;
+      --accent: #6474FF;
+    }
+    html, body {
+      margin: 0; padding: 0; width: 100%; min-height: 100dvh;
+      font-family: var(--cp);
+      background: #fff;
+      color: #000;
+      -webkit-text-size-adjust: 100%;
+    }
+    /* Slide-up entrance: the whole page rises in on load. */
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .page {
+      position: relative; z-index: 2;
+      min-height: 100dvh;
+      background: transparent;
+      display: flex; flex-direction: column;
+      animation: slideUp 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    /* Cream sits ONLY at the very bottom, just under the paper, tall enough to
+       fill behind the Safari bar so there's no white strip there. */
+    .bottom-cream {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      height: 120px; background: #F5DBCA;
+      z-index: 0; pointer-events: none;
+    }
+    /* Your torn-edge.png, pinned to the bottom, above the cream, below content. */
+    .torn {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      z-index: 1;
+      width: 100%; height: auto;
+      pointer-events: none; display: block;
+    }
+
+    .content { position: relative; z-index: 2; padding: 14px 22px 40px; flex: 1; }
+
+    .topbar { display: flex; align-items: center; height: 40px; }
+    .close { font-size: 26px; line-height: 1; background: none; border: none; color: #000; cursor: pointer; padding: 4px; }
+
+    .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: 6px; }
+    .head-left { display: flex; flex-direction: column; align-items: flex-start; }
+    .title { font-size: 28px; font-weight: 400; line-height: 1.12; margin: 0; }
+    .title em { font-style: italic; }
+
+    /* polaroids - your pola-frame.png overlays the photo. The photo sits behind,
+       CROPPED SQUARE (center) and sized to the frame window width. Adjust --win-*
+       to match your frame's transparent window. */
+    .polas { position: relative; width: 120px; height: 110px; flex-shrink: 0; margin-top: 4px; }
+    .pola {
+      position: absolute; width: 88px; height: 100px;
+      --win-inset-x: 9%;    /* side padding of the window inside the frame */
+      --win-inset-top: 8%;  /* top padding of the window */
+    }
+    .pola .photo {
+      position: absolute;
+      left: var(--win-inset-x);
+      top: var(--win-inset-top);
+      width: calc(100% - 2 * var(--win-inset-x));
+      aspect-ratio: 1 / 1;     /* square */
+      height: auto;
+      object-fit: cover;       /* crop to fill the square, centered (trims top/bottom) */
+      object-position: center;
+    }
+    .pola .frame {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: contain; pointer-events: none;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.18));
+    }
+    .pola.left  { left: 0;  top: 8px; transform: rotate(-8deg); z-index: 2; }
+    .pola.right { right: 0; top: 0;   transform: rotate(7deg);  z-index: 1; }
+
+    .datepill {
+      display: inline-block; margin-top: 18px;
+      background: #E1E1E1; border-radius: 360px;
+      padding: 7px 16px;
+      font-size: 19px; letter-spacing: -0.004em; color: #000;
+    }
+    .datepill .d { font-weight: 700; }
+    .datepill .t { font-weight: 400; }
+
+    /* features */
+    .features { margin-top: 26px; display: flex; flex-direction: column; gap: 16px; }
+    .feat { display: flex; gap: 14px; align-items: flex-start; }
+    .feat .ic { width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; }
+    .feat .ic img { width: 30px; height: 30px; object-fit: contain; }
+    .feat .ft { font-size: 16px; font-weight: 600; color: #000; line-height: 1.15; }
+    .feat .fd { font-size: 16px; font-weight: 400; color: #999999; line-height: 1.2; margin-top: 2px; }
+
+    /* price cards */
+    .cards { display: flex; gap: 12px; margin-top: 30px; justify-content: space-between; }
+    .card {
+      width: 100px; height: 100px; flex: 1 1 0;
+      border: 0.5px solid #000; border-radius: 12px; overflow: hidden;
+      display: flex; flex-direction: column; cursor: pointer; background: #fff;
+      transition: box-shadow 120ms ease;
+    }
+    .card .top { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 6px 4px; }
+    .card .toks { font-size: 16px; font-weight: 300; color: #000; text-align: center; line-height: 1.05; }
+    .card .price { font-weight: 500; color: #000; }
+    .card .price .cur { font-size: 19px; }
+    .card .price .cents { font-size: 16px; vertical-align: super; }
+    .card .bot { border-top: 0.5px solid #000; text-align: center; padding: 5px 4px; font-size: 14px; }
+    .card .bot.reg { font-weight: 300; color: #000; }
+    .card .bot.disc { font-weight: 700; color: var(--green); }
+    .card.selected .bot { background: #000; color: #fff; }
+    .card.selected .bot.disc { color: #fff; }
+
+    /* pay buttons (hidden until selection) */
+    .pays { margin-top: 28px; display: none; flex-direction: column; align-items: center; gap: 20px; }
+    .pays.show { display: flex; }
+    .btn { width: 329px; max-width: 100%; height: 54px; border: none; border-radius: 360px;
+      font-family: var(--cp); font-weight: 600; font-size: 22px; cursor: pointer;
+      display: grid; place-items: center; }
+    .btn.apple { background: #000; color: #fff; }
+    .btn.apple .lbl { display: inline-flex; align-items: center; gap: 6px; }
+    .btn.cc { background: #DFDFDF; color: #000; }
+
+    .footer { position: relative; z-index: 1; text-align: center; font-size: 16px; color: #000;
+      padding: 20px 28px calc(24px + env(safe-area-inset-bottom)); line-height: 1.3; }
+    .footer a { color: #000; text-decoration: underline; }
+
+    /* processing overlay */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 50;
+      display: none; align-items: center; justify-content: center; }
+    .overlay.show { display: flex; }
+    .proc { background: #fff; border-radius: 22px; padding: 30px 54px; text-align: center;
+      box-shadow: 0 10px 60px rgba(0,0,0,0.2); }
+    .proc .spin { width: 26px; height: 26px; border: 2.5px solid #ddd; border-top-color: #000;
+      border-radius: 50%; margin: 0 auto 14px; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .proc .lbl { font-size: 22px; }
+
+    /* ToS / card overlays (slide up sheets) */
+    .sheet { position: fixed; inset: 0; z-index: 60; display: none; }
+    .sheet.show { display: block; }
+    .sheet .scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.35); }
+    .sheet .panel { position: absolute; left: 0; right: 0; bottom: 0; background: #fff;
+      border-radius: 18px 18px 0 0; padding: 22px 22px calc(28px + env(safe-area-inset-bottom));
+      max-height: 80vh; overflow-y: auto; animation: slideUp 260ms cubic-bezier(0.22,1,0.36,1); }
+    .sheet .panel h3 { font-size: 22px; font-weight: 600; margin: 0 0 10px; }
+    .sheet .panel p { font-size: 16px; color: #333; }
+    .sheet .close-sheet { position: absolute; right: 16px; top: 12px; font-size: 24px; background: none; border: none; cursor: pointer; }
+    .pay-error { color: #c0392b; font-size: 15px; margin-top: 10px; min-height: 18px; }
+    #express-checkout-element { width: 329px; max-width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="bottom-cream"></div>
+  <img class="torn" id="torn" src="/pay/torn-edge.png" alt="" />
+  <div class="page">
+
+    <div class="content">
+      <div class="topbar">
+        <button class="close" id="back" aria-label="Back">&#10005;</button>
+      </div>
+
+      <div class="head">
+        <div class="head-left">
+          <h1 class="title">Secure your spot,<br>Date <em id="reltime">soon</em></h1>
+          <div class="datepill"><span class="d" id="date-d">Tues</span> <span class="t" id="date-t"></span></div>
+        </div>
+        <div class="polas">
+          <div class="pola right">
+            <img id="pola-right" class="photo" alt="" />
+            <img class="frame" src="/pay/pola-frame.png" alt="" />
+          </div>
+          <div class="pola left">
+            <img id="pola-left" class="photo" alt="" />
+            <img class="frame" src="/pay/pola-frame.png" alt="" />
+          </div>
+        </div>
+      </div>
+
+      <div class="features">
+        <div class="feat">
+          <div class="ic"><img src="/pay/humans.png" alt="" /></div>
+          <div><div class="ft">Matches made by humans</div><div class="fd">Our matchmaking team makes the pair. Ai is just here to collect info</div></div>
+        </div>
+        <div class="feat">
+          <div class="ic"><img src="/pay/vetted.png" alt="" /></div>
+          <div><div class="ft">Vetted participants</div><div class="fd">Only the Amata members who received positive feedback after dates are accepted.</div></div>
+        </div>
+        <div class="feat">
+          <div class="ic"><img src="/pay/manhattan.png" alt="" /></div>
+          <div><div class="ft">Manhattan venues only</div><div class="fd">We will book a table for you at a partner venue in Manhattan.</div></div>
+        </div>
+      </div>
+
+      <div class="cards" id="cards"></div>
+
+      <div class="pays" id="pays">
+        <div id="express-checkout-element"></div>
+        <button class="btn cc" id="btn-card">Pay with credit card</button>
+      </div>
+    </div>
+
+    <div class="footer" id="footer">
+      If a blind date gets canceled, you'll receive a full cash refund
+    </div>
+  </div>
+
+  <!-- processing overlay -->
+  <div class="overlay" id="overlay">
+    <div class="proc"><div class="spin"></div><div class="lbl">Payment processing</div></div>
+  </div>
+
+  <!-- ToS sheet -->
+  <div class="sheet" id="tos">
+    <div class="scrim" data-close-sheet></div>
+    <div class="panel">
+      <button class="close-sheet" data-close-sheet>&#10005;</button>
+      <h3>Terms of Service</h3>
+      <p>(To be filled later.)</p>
+    </div>
+  </div>
+
+  <!-- card-entry sheet: Stripe Payment Element mounts here -->
+  <div class="sheet" id="cardsheet">
+    <div class="scrim" data-close-sheet></div>
+    <div class="panel">
+      <button class="close-sheet" data-close-sheet>&#10005;</button>
+      <h3>Pay with credit card</h3>
+      <div id="payment-element"></div>
+      <div id="pay-error" class="pay-error"></div>
+      <button class="btn cc" id="btn-card-submit" style="width:100%; margin-top:18px;">Pay</button>
+    </div>
+  </div>
+
+  <script>
+    const token = location.pathname.split('/').filter(Boolean).pop();
+    let selected = null;
+    let options = [];
+
+    const cardsEl = document.getElementById('cards');
+    const paysEl = document.getElementById('pays');
+    const footerEl = document.getElementById('footer');
+
+    function centsToParts(c) {
+      const d = Math.floor(c / 100);
+      const cents = String(c % 100).padStart(2, '0');
+      return { d, cents };
+    }
+
+    function renderCards() {
+      cardsEl.innerHTML = options.map((o) => {
+        const p = centsToParts(o.amount_cents);
+        const botClass = o.discount ? 'bot disc' : 'bot reg';
+        return `<div class="card" data-id="${o.id}">
+          <div class="top">
+            <div class="toks">${o.label}</div>
+            <div class="price"><span class="cur">$${p.d}</span><span class="cents">${p.cents}</span></div>
+          </div>
+          <div class="${botClass}">${o.sub}</div>
+        </div>`;
+      }).join('');
+      cardsEl.querySelectorAll('.card').forEach((el) => {
+        el.addEventListener('click', () => selectOption(el.dataset.id));
+      });
+    }
+
+    let stripe = null, elements = null, paymentElement = null, eceMounted = false;
+    let clientSecret = null;
+    const returnUrl = location.origin + '/pay/' + token + '/return';
+
+    function selectOption(id) {
+      selected = options.find((o) => o.id === id) || null;
+      cardsEl.querySelectorAll('.card').forEach((el) => {
+        el.classList.toggle('selected', el.dataset.id === id);
+      });
+      paysEl.classList.add('show');
+      footerEl.innerHTML = 'By paying, you agree to our <a href="#" id="tos-link">Terms of Service.</a> If a blind date gets canceled, you get a full refund in cash.';
+      document.getElementById('tos-link').addEventListener('click', (e) => { e.preventDefault(); openSheet('tos'); });
+      // Create/refresh the PaymentIntent for the chosen option, then (re)mount.
+      setupPayment();
+    }
+
+    // Create a PaymentIntent for the selected option and mount the Elements.
+    async function setupPayment() {
+      if (!selected || !stripe) return;
+      try {
+        const res = await fetch(`/pay/${token}/intent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ option_id: selected.id }),
+        });
+        if (!res.ok) { showError('Could not start payment. Please try again.'); return; }
+        const data = await res.json();
+        clientSecret = data.client_secret;
+
+        // Fresh Elements instance bound to this intent.
+        elements = stripe.elements({ clientSecret, appearance: { theme: 'stripe' } });
+
+        // Payment Element (card) in the sheet.
+        if (paymentElement) paymentElement.unmount();
+        paymentElement = elements.create('payment', { layout: 'tabs' });
+        paymentElement.mount('#payment-element');
+
+        // Express Checkout Element (Apple Pay / Google Pay) - only shows when a
+        // wallet is available AND the domain is verified (production).
+        if (!eceMounted) {
+          const ece = elements.create('expressCheckout');
+          ece.on('confirm', async () => {
+            const { error } = await stripe.confirmPayment({ elements, confirmParams: { return_url: returnUrl } });
+            if (error) showError(error.message);
+          });
+          ece.mount('#express-checkout-element');
+          eceMounted = true;
+        }
+      } catch {
+        showError('Could not start payment. Please try again.');
+      }
+    }
+
+    function showError(msg) {
+      const e = document.getElementById('pay-error');
+      if (e) e.textContent = msg || '';
+    }
+
+    // Card "Pay" inside the sheet.
+    document.getElementById('btn-card').addEventListener('click', () => openSheet('cardsheet'));
+    document.getElementById('btn-card-submit').addEventListener('click', async () => {
+      if (!stripe || !elements) return;
+      showError('');
+      const btn = document.getElementById('btn-card-submit');
+      btn.disabled = true;
+      document.getElementById('overlay').classList.add('show');
+      const { error } = await stripe.confirmPayment({ elements, confirmParams: { return_url: returnUrl } });
+      // If we get here, there was an immediate error (otherwise the browser redirects).
+      if (error) {
+        document.getElementById('overlay').classList.remove('show');
+        btn.disabled = false;
+        showError(error.message);
+      }
+    });
+
+    // overlays
+    function openSheet(id) { document.getElementById(id).classList.add('show'); }
+    document.querySelectorAll('[data-close-sheet]').forEach((el) => {
+      el.addEventListener('click', () => el.closest('.sheet').classList.remove('show'));
+    });
+
+    document.getElementById('back').addEventListener('click', () => {
+      // Return to the chat.
+      window.location.href = '/chat';
+    });
+
+    async function load() {
+      try {
+        const res = await fetch(`/pay/${token}/data`);
+        if (!res.ok) { footerEl.textContent = 'This payment link is invalid or expired.'; return; }
+        const data = await res.json();
+
+        // title relative time
+        document.getElementById('reltime').textContent = data.title_relative;
+        // date pill: "Tues Apr 28 - 8PM" -> split bold date / regular time
+        const parts = data.date_label.split(' - ');
+        document.getElementById('date-d').textContent = parts[0];
+        document.getElementById('date-t').textContent = parts[1] ? '- ' + parts[1] : '';
+
+        // polaroids (photo sits behind the frame window)
+        const left = document.getElementById('pola-left');
+        if (data.user_photo) left.src = data.user_photo; else left.style.display = 'none';
+        document.getElementById('pola-right').src = data.look_for_image;
+
+        options = data.options || [];
+        renderCards();
+
+        // Initialize Stripe with the publishable key (test mode in dev).
+        if (data.publishable_key && window.Stripe) {
+          stripe = Stripe(data.publishable_key);
+        }
+
+        if (data.already_paid) {
+          footerEl.textContent = 'This spot is already secured.';
+        }
+      } catch {
+        footerEl.textContent = 'Something went wrong loading this page.';
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

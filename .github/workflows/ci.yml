@@ -1,0 +1,32 @@
+name: CI
+
+# Safety net before anything deploys: install dependencies cleanly and
+# syntax-check every JS file. Railway can be configured to wait for this to pass
+# before deploying (see the deploy runbook).
+
+on:
+  push:
+    branches: [main, production]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax-check all JS (src + scripts + public)
+        run: |
+          set -e
+          find src scripts public -name '*.js' -print0 \
+            | xargs -0 -I{} node --check "{}"
+          echo "All JS files passed node --check."

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, interactive-widget=resizes-content" />
+  <title>Keyboard test V1-CSS</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0; padding: 0;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+    body {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    }
+
+    .header {
+      flex: 0 0 auto;
+      padding: 14px 18px;
+      border-bottom: 1px solid #e5e5e8;
+      font-weight: 600;
+      background: #fff;
+    }
+
+    .messages {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      padding: 14px;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .msg { max-width: 78%; padding: 9px 13px; border-radius: 16px; margin-bottom: 8px;
+      white-space: pre-wrap; line-height: 1.4; }
+    .ai { background: #e9e9eb; color: #111; align-self: flex-start; }
+    .me { background: #0b93f6; color: #fff; margin-left: auto; }
+
+    .composer {
+      flex: 0 0 auto;
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid #e5e5e8;
+      background: #fff;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    }
+    .composer input {
+      flex: 1 1 auto;
+      font-size: 16px;
+      padding: 10px 14px;
+      border: 1px solid #d0d0d5;
+      border-radius: 20px;
+      outline: none;
+    }
+    .composer button {
+      flex: 0 0 auto;
+      width: 44px; height: 44px; border-radius: 50%;
+      border: none; background: #0b93f6; color: #fff; font-size: 20px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">Keyboard test V1-CSS</div>
+    <div class="messages" id="messages"></div>
+    <div class="composer">
+      <input id="input" type="text" placeholder="Message" autocomplete="off" />
+      <button id="send">↑</button>
+    </div>
+  </div>
+
+  <script>
+    const messages = document.getElementById('messages');
+    const samples = [
+      ['ai', "Keyboard test V1-CSS - pure CSS, no layout JS."],
+      ['me', "Try to drag the input bar up."],
+      ['ai', "The input bar should stay above the keyboard."],
+      ['me', "And above the URL bar when keyboard is closed."],
+      ['ai', "Scroll these messages - only this list scrolls."],
+      ['me', "Filler message to make things scroll."],
+      ['ai', "Another filler message here."],
+      ['me', "And one more so the list overflows."],
+      ['ai', "Last one - type below and hit send to add more."],
+    ];
+    function add(role, text) {
+      const d = document.createElement('div');
+      d.className = 'msg ' + (role === 'me' ? 'me' : 'ai');
+      d.textContent = text;
+      messages.appendChild(d);
+      messages.scrollTop = messages.scrollHeight;
+    }
+    samples.forEach(([r, t]) => add(r, t));
+
+    const input = document.getElementById('input');
+    document.getElementById('send').addEventListener('click', sendMsg);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMsg(); });
+    function sendMsg() {
+      const t = input.value.trim();
+      if (!t) return;
+      add('me', t);
+      input.value = '';
+      input.focus();
+      setTimeout(() => add('ai', 'Echo: ' + t), 300);
+    }
+  </script>
+</body>
+</html>

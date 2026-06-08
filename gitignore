@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# secrets — never commit real env files
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# build/runtime artifacts
+dist/
+coverage/
+*.pid

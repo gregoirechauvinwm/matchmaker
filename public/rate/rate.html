@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <title>Your physical preferences</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --cp: "Crimson Pro", Georgia, serif;
+      --ink: #111;
+      --muted: #8A8A8A;
+      --btn: #EFEFEF;
+      --btn-press: #E2E2E2;
+      /* progress bar fills from pink -> amber -> green as you advance */
+      --bar: #F2618C;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; height: 100%;
+      font-family: var(--cp); color: var(--ink); background: #fff;
+      overflow: hidden; overscroll-behavior: none;
+    }
+    .screen {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      width: 100%; max-width: 480px; margin: 0 auto;
+      padding: calc(env(safe-area-inset-top) + 10px) 18px calc(env(safe-area-inset-bottom) + 16px);
+      touch-action: pan-y;        /* allow vertical scroll, never horizontal page-pan */
+      overflow: hidden;
+    }
+
+    /* top row: progress bar + close */
+    .top { display: flex; align-items: center; gap: 14px; }
+    .progress { flex: 1; height: 6px; background: #ECECEC; border-radius: 360px; overflow: hidden; }
+    .progress > div {
+      height: 100%; width: 0; border-radius: 360px; background: var(--bar);
+      transition: width .38s cubic-bezier(.25,.46,.45,.94), background .38s ease;
+    }
+    .close {
+      width: 30px; height: 30px; border: none; background: none; cursor: pointer;
+      font-size: 26px; line-height: 1; color: #111; padding: 0;
+      display: grid; place-items: center;
+    }
+
+    .title {
+      font-size: 28px; font-weight: 400; text-align: left; color: #000;
+      line-height: 1.12; margin: 18px 0 6px;
+    }
+
+    /* the sliding stage: each photo is a slide layered on top of each other */
+    .stage {
+      position: relative; flex: 1; min-height: 0; margin-top: 8px;
+      display: flex; align-items: stretch;
+      overflow: hidden;          /* clip the off-screen slides (translateX +/-100%) */
+    }
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      transform: translateX(100%); opacity: 0;
+      transition: transform .34s cubic-bezier(.33,1,.68,1), opacity .26s ease;
+      pointer-events: none;
+    }
+    .slide.active { transform: translateX(0); opacity: 1; pointer-events: auto; }
+    .slide.left   { transform: translateX(-100%); opacity: 0; }
+
+    .photo-wrap {
+      position: relative; flex: 1; min-height: 0;
+      border-radius: 16px; overflow: hidden; background: #F2F2F2;
+    }
+    .photo-wrap img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      user-select: none; -webkit-user-drag: none;
+    }
+    /* back chevron, overlaid on the left of the photo (mockup) */
+    .back {
+      position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+      width: 34px; height: 34px; border: none; background: none; cursor: pointer;
+      font-size: 26px; color: #111; display: grid; place-items: center;
+      text-shadow: 0 1px 2px rgba(255,255,255,.6);
+    }
+    .back[hidden] { display: none; }
+
+    /* the 1-5 scale */
+    .scale {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+      padding-top: 14px;
+    }
+    .sc {
+      border: none; background: var(--btn); border-radius: 14px; cursor: pointer;
+      padding: 10px 4px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+      font-family: var(--cp); transition: background .12s ease, transform .08s ease;
+    }
+    .sc:active { background: var(--btn-press); transform: scale(.97); }
+    .sc.chosen { background: #111; }
+    .sc.chosen .num, .sc.chosen .lbl { color: #fff; }
+    .sc .num { font-size: 19px; font-weight: 600; color: #111; }
+    .sc .lbl { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+    .done-state {
+      position: absolute; inset: 0; display: none;
+      flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      text-align: center; padding: 24px;
+    }
+    .done-state .spin {
+      width: 26px; height: 26px; border: 2.5px solid #ddd; border-top-color: #111;
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .done-state .lbl { font-size: 20px; }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <div class="top">
+      <div class="progress"><div id="bar"></div></div>
+      <button class="close" id="close" aria-label="Close">&times;</button>
+    </div>
+    <div class="title" id="title">Is this someone you&rsquo;d date?</div>
+    <div class="stage" id="stage">
+      <div class="done-state" id="done">
+        <div class="spin"></div>
+        <div class="lbl">All done — taking you back…</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Score labels (per the mockup's "No / Meh / Maybe / Yes / Love it").
+    const LABELS = ['No', 'Meh', 'Maybe', 'Yes', 'Love it'];
+    // Progress colors: ramp pink -> amber -> green as the bar fills.
+    function barColor(frac) {
+      if (frac < 0.34) return '#F2618C';
+      if (frac < 0.67) return '#F2A23C';
+      return '#24B93C';
+    }
+    // How many photos ahead to keep preloaded (windowed preload).
+    const PRELOAD_AHEAD = 3;
+
+    const token = location.pathname.split('/').filter(Boolean)[1]; // /rate/{token}
+    const stage = document.getElementById('stage');
+    const bar = document.getElementById('bar');
+    const titleEl = document.getElementById('title');
+    const doneEl = document.getElementById('done');
+
+    let photos = [];     // [{ id, url, score }]
+    let slides = [];      // DOM nodes, parallel to photos
+    let imgs = [];        // <img> nodes, parallel
+    let loaded = [];      // bool: has this image decoded yet
+    let cur = 0;          // current slide index
+    let total = 0;
+
+    document.getElementById('close').addEventListener('click', () => { window.location.href = '/chat'; });
+
+    // --- windowed preload ----------------------------------------------------
+    // Kick off loading for [from .. from+PRELOAD_AHEAD]. Each <img> downloads +
+    // decodes; we mark loaded so a slide is never revealed mid-decode.
+    function preloadAround(from) {
+      const end = Math.min(total - 1, from + PRELOAD_AHEAD);
+      for (let i = from; i <= end; i++) {
+        if (!imgs[i] || imgs[i].dataset.started) continue;
+        imgs[i].dataset.started = '1';
+        imgs[i].src = photos[i].url;
+        // decode() resolves once paintable; fall back to onload.
+        if (imgs[i].decode) {
+          imgs[i].decode().then(() => { loaded[i] = true; }).catch(() => { loaded[i] = true; });
+        } else {
+          imgs[i].onload = () => { loaded[i] = true; };
+        }
+      }
+    }
+
+    // --- slide control -------------------------------------------------------
+    function updateBar() {
+      const scored = photos.filter((p) => p.score != null).length;
+      const frac = total ? scored / total : 0;
+      bar.style.width = (frac * 100) + '%';
+      bar.style.background = barColor(frac);
+    }
+
+    function showSlide(n) {
+      cur = n;
+      slides.forEach((s, i) => {
+        s.classList.toggle('active', i === n);
+        s.classList.toggle('left', i < n);
+      });
+      // reflect any existing score on this slide's buttons
+      markChosen(n);
+      // preload this one + the next few
+      preloadAround(n);
+      updateBar();
+    }
+
+    function markChosen(n) {
+      const score = photos[n].score;
+      const btns = slides[n].querySelectorAll('.sc');
+      btns.forEach((b) => b.classList.toggle('chosen', Number(b.dataset.v) === score));
+    }
+
+    // Record a score: optimistic UI + fire-and-forget save, then slide on.
+    function choose(n, value) {
+      photos[n].score = value;
+      markChosen(n);
+      updateBar();
+
+      // Deferred save (zero-latency between photos, like onboarding).
+      fetch(`/rate/${token}/score`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photo_id: photos[n].id, score: value }),
+      }).catch(() => {});
+
+      // Advance: next photo, or finish if every photo now has a score.
+      const allScored = photos.every((p) => p.score != null);
+      if (n < total - 1) {
+        // small beat so the "chosen" state is visible before the slide
+        setTimeout(() => showSlide(n + 1), 140);
+      } else if (allScored) {
+        setTimeout(finish, 160);
+      } else {
+        // last slide reached but earlier ones still blank: jump to first blank
+        const blank = photos.findIndex((p) => p.score == null);
+        if (blank !== -1) setTimeout(() => showSlide(blank), 140);
+      }
+    }
+
+    function goBack() {
+      if (cur > 0) showSlide(cur - 1);
+    }
+
+    async function finish() {
+      // Show the done state, fire completion (idempotent), then return to chat
+      // where the scripted success line is waiting (revealed with typing).
+      slides.forEach((s) => s.classList.remove('active'));
+      doneEl.style.display = 'flex';
+      try {
+        await fetch(`/rate/${token}/complete`, { method: 'POST' });
+      } catch {}
+      try { sessionStorage.setItem('justRated', '1'); } catch {}
+      setTimeout(() => { window.location.href = '/chat'; }, 700);
+    }
+
+    // --- build the slides ----------------------------------------------------
+    function buildSlides() {
+      photos.forEach((p, i) => {
+        const slide = document.createElement('div');
+        slide.className = 'slide';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'photo-wrap';
+
+        const back = document.createElement('button');
+        back.className = 'back';
+        back.innerHTML = '&#8249;'; // ‹
+        if (i === 0) back.hidden = true;
+        back.addEventListener('click', goBack);
+
+        const img = document.createElement('img');
+        img.alt = '';
+        img.decoding = 'async';
+        imgs[i] = img;
+        loaded[i] = false;
+
+        wrap.appendChild(img);
+        wrap.appendChild(back);
+
+        const scale = document.createElement('div');
+        scale.className = 'scale';
+        for (let v = 1; v <= 5; v++) {
+          const b = document.createElement('button');
+          b.className = 'sc';
+          b.dataset.v = String(v);
+          b.innerHTML = `<span class="num">${v}</span><span class="lbl">${LABELS[v - 1]}</span>`;
+          b.addEventListener('click', () => choose(i, v));
+          scale.appendChild(b);
+        }
+
+        slide.appendChild(wrap);
+        slide.appendChild(scale);
+        stage.appendChild(slide);
+        slides[i] = slide;
+      });
+    }
+
+    // --- boot ----------------------------------------------------------------
+    async function boot() {
+      let data;
+      try {
+        const res = await fetch(`/rate/${token}/data`);
+        if (!res.ok) { window.location.href = '/chat'; return; }
+        data = await res.json();
+      } catch { window.location.href = '/chat'; return; }
+
+      // Title is a fixed prompt ("Is this someone you'd date?"), set in the
+      // markup. The scripted rate_prompt line lives in the chat bubble, not here.
+      photos = (data.photos || []).map((p) => ({ id: p.id, url: p.url, score: p.score ?? null }));
+      total = photos.length;
+
+      // Nothing to rate, or already complete -> just go back.
+      if (total === 0 || data.complete) {
+        if (data.complete) { try { sessionStorage.setItem('justRated', '1'); } catch {} }
+        window.location.href = '/chat';
+        return;
+      }
+
+      buildSlides();
+
+      // Resume on the first unscored photo. Gate the first reveal on its image
+      // being decoded so there's no flash; preload the window behind the scenes.
+      const start = data.resume_index || 0;
+      preloadAround(start);
+
+      const startImg = imgs[start];
+      const reveal = () => showSlide(start);
+      if (startImg && startImg.decode && startImg.dataset.started) {
+        startImg.decode().then(reveal).catch(reveal);
+      } else {
+        // image element exists; reveal on its load, with a short safety timeout
+        let revealed = false;
+        const once = () => { if (!revealed) { revealed = true; reveal(); } };
+        if (startImg) startImg.addEventListener('load', once, { once: true });
+        setTimeout(once, 1200);
+      }
+    }
+
+    boot();
+  </script>
+</body>
+</html>

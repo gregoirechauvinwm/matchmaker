@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>kbtest</title>
+<style>
+  /* Hard-lock the document. position:fixed on html+body with overflow:hidden
+     means the PAGE cannot scroll at all - only the inner list scrolls. This is
+     the strongest lock available and is what stops Safari shifting the page. */
+  html, body {
+    margin: 0; padding: 0;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    -webkit-text-size-adjust: 100%;
+    font-family: -apple-system, system-ui, sans-serif;
+    background: #fff;
+  }
+
+  /* Header: fixed at top, centered avatar + name. */
+  #header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 10;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px 0 10px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+    /* Translucent + blur so messages scroll behind it (visible, blurred) rather
+       than vanishing at a hard white edge - the iOS/iMessage status-bar look. */
+    background: rgba(255,255,255,0.72);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+  }
+  #avatar {
+    width: 50px; height: 50px; border-radius: 50%;
+    background: #0b93f6; color: #fff;
+    display: grid; place-items: center; font-weight: 600; font-size: 20px;
+  }
+  #headname { font-size: 13px; font-weight: 600; color: #1c1c1e; }
+
+  /* The ONLY scroller. It extends UP underneath the translucent header so
+     scrolled messages show through the blur (top padding keeps the first
+     message clear of the header at rest). */
+  #list {
+    position: fixed;
+    top: 0;
+    bottom: 64px;
+    left: 0; right: 0;
+    overflow-y: auto;
+    padding: 100px 16px 8px;   /* top padding clears the header at rest */
+  }
+  .msg {
+    background: #e9e9eb; border-radius: 16px; padding: 8px 13px;
+    margin-bottom: 8px; max-width: 78%; font-size: 16px;
+  }
+
+  /* Input bar: fixed to the bottom. NO JS. We rely on Safari's native keyboard
+     avoidance to lift a bottom-fixed input when the body is hard-locked. */
+  #inputrow {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 10;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    background: #f4f4f4;
+    border-top: 1px solid rgba(0,0,0,0.07);
+  }
+  /* The pill holds the input and the send button side by side. */
+  #pill {
+    display: flex; align-items: center; gap: 6px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    padding: 3px 4px 3px 14px;
+  }
+  #input {
+    flex: 1;
+    border: none; outline: none; background: transparent;
+    font-size: 16px; padding: 7px 0;
+  }
+  /* iMessage-style send button: blue circle, up-arrow, inside the pill on the
+     right. Hidden (scaled down) until there is text. */
+  #send {
+    width: 30px; height: 30px; flex-shrink: 0;
+    border: none; border-radius: 50%;
+    background: #0b93f6; color: #fff;
+    display: grid; place-items: center; cursor: pointer;
+    transform: scale(0.5); opacity: 0;
+    transition: transform 140ms ease, opacity 140ms ease;
+    pointer-events: none;
+  }
+  #pill.has-text #send {
+    transform: scale(1); opacity: 1; pointer-events: auto;
+  }
+</style>
+</head>
+<body>
+  <div id="header">
+    <div id="avatar">M</div>
+    <div id="headname">My Amata · v13</div>
+  </div>
+
+  <div id="list"></div>
+
+  <div id="inputrow">
+    <div id="pill">
+      <input id="input" type="text" placeholder="Message"
+             autocomplete="off" autocorrect="off" autocapitalize="off" />
+      <button id="send" aria-label="Send" tabindex="-1">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+             stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="20" x2="12" y2="5"></line>
+          <polyline points="6 11 12 5 18 11"></polyline>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const list = document.getElementById('list');
+    for (let i = 1; i <= 30; i++) {
+      const d = document.createElement('div');
+      d.className = 'msg';
+      d.textContent = 'Message ' + i;
+      list.appendChild(d);
+    }
+    list.scrollTop = list.scrollHeight;
+
+    // Send button: appears only when there's text.
+    const input = document.getElementById('input');
+    const pill = document.getElementById('pill');
+    const send = document.getElementById('send');
+    input.addEventListener('input', () => {
+      if (input.value.trim()) pill.classList.add('has-text');
+      else pill.classList.remove('has-text');
+    });
+
+    // Demo send: append a bubble, clear input, KEEP keyboard up (preventDefault
+    // on mousedown stops the button stealing focus from the input).
+    function doSend() {
+      const t = input.value.trim();
+      if (!t) return;
+      const d = document.createElement('div');
+      d.className = 'msg';
+      d.style.marginLeft = 'auto';
+      d.style.background = '#0b93f6';
+      d.style.color = '#fff';
+      d.textContent = t;
+      list.appendChild(d);
+      list.scrollTop = list.scrollHeight;
+      input.value = '';
+      pill.classList.remove('has-text');
+    }
+    send.addEventListener('mousedown', (e) => e.preventDefault());
+    send.addEventListener('click', (e) => { e.preventDefault(); doSend(); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+/* public/chat.css
+   Rebuilt directly on top of the PROVEN scroll-behind-test layout.
+   Invariants that must NOT change (this exact combo is what works on iOS Safari):
+   - html, body: position:fixed + inset:0 + overflow:hidden  (page never scrolls)
+   - .chat-body (the shell): position:fixed + inset:0 + flex column
+   - .chat-list (the scroller): flex:1 1 auto + overflow-y:auto  (the ONLY scroller)
+   - .chat-inputbar: position:fixed overlay (NOT a flex child) so messages scroll
+     behind it. Never make .chat-list display:flex or give the inputbar flow.
+*/
+
+:root {
+  --imsg-blue: #6474FF;
+  --ai-bubble: #e9e9eb;
+  --ai-text: #1c1c1e;
+}
+
+* { box-sizing: border-box; }
+
+/* Hard-locked page: never scrolls; the message list is the ONLY scroller. */
+html, body {
+  margin: 0; padding: 0;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  font-family: -apple-system, system-ui, "Segoe UI", sans-serif;
+  background: #fff;
+}
+
+/* App shell fills the viewport (test's .app). interactive-widget=resizes-content
+   in the viewport meta makes the keyboard resize this instead of overlapping. */
+.chat-body {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fixed header (does not scroll) - test's .header with avatar + name added. */
+.chat-header {
+  flex: 0 0 auto;
+  display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 10px;
+  padding: 8px 0 10px;
+  padding-top: calc(8px + env(safe-area-inset-top));
+  background: rgba(255,255,255,0.72);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.chat-avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--imsg-blue); color: #fff;
+  display: grid; place-items: center; font-weight: 600; font-size: 18px;
+  overflow: hidden;
+}
+.chat-name { font-family: "Covered By Your Grace", cursive; font-size: 20px; color: #1c1c1e; }
+
+/* THE SCROLLER (test's .scroller). Fills all remaining space and extends to the
+   bottom of the shell; the input bar overlays it. Bottom padding lets the last
+   message rise above the bar. min-height:0 prevents the flex item from growing
+   past the shell (the classic flex min-height:auto trap). */
+.chat-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 12px 16px 80px;   /* 80px bottom clears the overlay bar */
+}
+
+/* Bottom-float lives ENTIRELY in this inner wrapper, never on .chat-list (the
+   scroller) - making the scroller a flex container breaks iOS overflow scrolling.
+   min-height:100% makes this wrapper fill the scroller; justify-content:flex-end
+   pins messages to the bottom when they don't fill the screen. When they
+   overflow, the wrapper grows past 100% and .chat-list scrolls normally. */
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 100%;
+  position: relative;
+}
+
+/* The small Amata avatar that sits at the bottom-left of the last ai bubble of
+   each run. It's a child of that bubble, absolutely positioned in the left
+   gutter. The bottom offset matches the ai bubble's vertical padding so the
+   avatar aligns with the last line of text (the ai bubbles are transparent, so
+   we align to the text, not the bubble box). */
+/* Column-avatar model. Avatars float in the left gutter of the message area,
+   positioned by `top`. The single `.live` avatar transitions `top` (the slide);
+   static copies mark past runs. CSS background-image paints synchronously from
+   cache on iOS Safari (a fresh <img> would show a blank decode frame). */
+.col-avatar {
+  position: absolute;
+  left: 0;                /* the ai bubbles are indented 36px -> this is the gutter */
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.col-avatar.live {
+  opacity: 0;
+  transition: top .34s cubic-bezier(.33,1,.68,1);
+}
+.col-avatar.live.show { opacity: 1; }
+
+/* Bubbles (real chat design: Crimson Pro, cream user bubble, flush-left AI). */
+.bubble {
+  max-width: 78%;
+  padding: 8px 13px;
+  font-family: "Crimson Pro", Georgia, serif;
+  font-size: 19px;
+  font-weight: 400;
+  line-height: 1.2;   /* 120% per Figma */
+  border-radius: 18px;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  -webkit-user-select: text; user-select: text;
+}
+.bubble.ai   { align-self: flex-start; background: transparent; color: var(--ai-text); padding-left: 0; max-width: 85%; margin-left: 36px; }
+.bubble.user { align-self: flex-end;   background: #FAF5EC; color: #3F3626; }
+
+/* Sent-bubble rise+fade */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.bubble.user.animate-in { animation: riseIn 180ms ease-out; }
+
+/* grouping */
+.bubble.ai.grouped-top { border-bottom-left-radius: 6px; }
+.bubble.ai.grouped-mid { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+.bubble.ai.grouped-bot { border-top-left-radius: 6px; }
+.bubble.user.grouped-top { border-bottom-right-radius: 6px; }
+.bubble.user.grouped-mid { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+.bubble.user.grouped-bot { border-top-right-radius: 6px; }
+.run-gap { margin-top: 8px; }
+
+/* typing indicator */
+.typing {
+  align-self: flex-start; background: var(--ai-bubble);
+  border-radius: 18px; padding: 11px 14px;
+  display: inline-flex; gap: 4px; margin-top: 8px;
+}
+.typing .dot { width: 7px; height: 7px; border-radius: 50%; background: #8e8e93; animation: dotbounce 1.2s infinite; }
+.typing .dot:nth-child(2) { animation-delay: .18s; }
+.typing .dot:nth-child(3) { animation-delay: .36s; }
+@keyframes dotbounce { 0%,60%,100% { transform: translateY(0); opacity:.4; } 30% { transform: translateY(-4px); opacity:1; } }
+
+/* ===== Input bar: fixed overlay (test's .inputbar). The scroller occupies the
+   area behind it, so messages scroll behind the pill. Gradient scrim fades
+   transparent -> solid white so messages fade into white where Safari's chrome
+   begins. pointer-events:none lets touches reach the scroller; the pill re-enables. */
+.chat-inputbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  padding: 36px 12px calc(8px + env(safe-area-inset-bottom));
+  background: linear-gradient(
+    to bottom,
+    rgba(255,255,255,0) 0%,
+    rgba(255,255,255,0.85) 45%,
+    rgba(255,255,255,1) 75%,
+    rgba(255,255,255,1) 100%
+  );
+  pointer-events: none;
+}
+
+/* Floating glass pill (your tuned values). */
+.composer-pill {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 6px;
+  border-radius: 22px;
+  padding: 5px 5px 5px 14px;
+  background: rgba(242, 242, 242, 0.80);
+  border: 1px solid #ffffff;
+  box-shadow: 0px -5px 50px 10px rgba(0, 0, 0, 0.10);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.composer {
+  flex: 1;
+  resize: none; border: none; outline: none; background: transparent;
+  font-size: 16px; font-family: inherit; line-height: 1.3;
+  max-height: 120px; padding: 7px 0;
+  color: #1c1c1e;
+}
+.composer::placeholder { color: #8e8e93; }
+
+/* Send button inside the pill; appears only when there's text. */
+.send-btn {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border: none; border-radius: 50%;
+  background: var(--imsg-blue); color: #fff;
+  display: grid; place-items: center; cursor: pointer;
+  transform: scale(0.5); opacity: 0;
+  transition: transform 140ms ease, opacity 140ms ease;
+  pointer-events: none;
+}
+.composer-pill.has-text .send-btn { transform: scale(1); opacity: 1; pointer-events: auto; }
+
+/* Lighten the pill briefly on send. */
+.composer-pill.sending { background: rgba(255, 255, 255, 0.92); }
+
+/* ===== Payment card bubble ===== */
+.pay-card {
+  align-self: flex-start;
+  display: block;
+  width: 78%;
+  max-width: 320px;
+  margin-top: 8px;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 0 4px 3px rgba(0,0,0,0.05);   /* X0 Y0 blur4 spread3 black 5% */
+  text-decoration: none;
+  overflow: hidden;
+}
+.pay-card-title {
+  font-family: "Crimson Pro", Georgia, serif;
+  font-size: 16px; font-weight: 400; font-style: italic;
+  color: #000;
+  text-align: center;
+  padding: 16px 14px;
+}
+.pay-card-divider { height: 1px; background: #E1E1E1; }
+.pay-card-cta {
+  font-family: "Crimson Pro", Georgia, serif;
+  font-size: 16px; font-weight: 600; font-style: normal;
+  color: #6474FF;
+  text-align: center;
+  padding: 16px 14px;
+}
