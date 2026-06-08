@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@24.6.0/build/css/intlTelInput.css" />
+  <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@24.6.0/build/js/intlTelInput.min.js"></script>
   <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     :root { --cp: "Crimson Pro", Georgia, serif; }
@@ -50,6 +52,11 @@
       letter-spacing: 0; outline: none; background: transparent; border-radius: 0;
     }
     .field::placeholder { color: #999; }
+    /* intl-tel-input: make it span the row and inherit the underline field look */
+    .phone-row { width: 100%; }
+    .phone-row .iti { width: 100%; }
+    .phone-row .iti input.field { border-radius: 0; }
+    .iti__selected-dial-code { font-family: var(--cp); font-size: 22px; }
     .err { font-size: 14px; font-weight: 400; color: #FF3B30; margin: 8px 0 0; min-height: 18px; }
     .field.invalid { border-bottom-color: #FF3B30; }
 
@@ -143,9 +150,8 @@
           <p class="title">What's your phone number?</p>
           <p class="para">We will send you a verification code on this number. We make sure our users are real people.</p>
         </div>
-        <div style="display:flex;gap:10px;align-items:flex-end">
-          <div class="field" style="width:78px;flex:0 0 auto">US +1</div>
-          <input class="field" id="f-phone" type="tel" inputmode="numeric" placeholder="" style="flex:1" />
+        <div class="phone-row">
+          <input class="field" id="f-phone" type="tel" inputmode="tel" placeholder="" style="width:100%" />
         </div>
         <p class="field-error" id="err-phone"></p>
         <p class="err" id="err-phone"></p>
@@ -428,8 +434,15 @@
     function formatError(s) {
       const type = s.dataset.type;
       if (type === 'input' && s.dataset.focus === 'f-phone') {
+        // intl-tel-input validates per selected country (US, FR, etc.).
+        const iti = window._itiPhone;
+        if (iti && typeof iti.isValidNumber === 'function') {
+          if (!iti.isValidNumber()) return 'Enter a valid phone number';
+          return null;
+        }
+        // Fallback if the library hasn't initialized: US 10-digit check.
         const digits = document.getElementById('f-phone').value.replace(/\D/g,'');
-        if (digits.length !== 10) return 'Enter a valid 10-digit phone number';
+        if (digits.length !== 10) return 'Enter a valid phone number';
         return null;
       }
       if (type === 'code') {
@@ -526,12 +539,16 @@
 
       // Phone step: request a verification code (blocking).
       if (s.dataset.focus === 'f-phone') {
-        const phone = document.getElementById('f-phone').value;
+        const iti = window._itiPhone;
+        // Prefer the library's E.164 output; fall back to the raw field value.
+        const phone = (iti && iti.getNumber && iti.getNumber()) || document.getElementById('f-phone').value;
+        const country = (iti && iti.getSelectedCountryData && (iti.getSelectedCountryData().iso2 || 'us').toUpperCase()) || 'US';
+        window._phoneCountry = country;
         const btn = s.querySelector('.step-next'); if (btn) btn.disabled = true;
         try {
           const r = await fetch('/auth/request-code', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, country: 'US' }),
+            body: JSON.stringify({ phone, country }),
           });
           if (!r.ok) throw new Error();
           window._phone = phone;
@@ -545,7 +562,7 @@
         try {
           const r = await fetch('/auth/confirm-code', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: window._phone, country: 'US', code }),
+            body: JSON.stringify({ phone: window._phone, country: window._phoneCountry || 'US', code }),
           });
           if (!r.ok) throw new Error();
           const data = await r.json();
@@ -585,14 +602,33 @@
     document.querySelectorAll('.step-next').forEach(b => b.addEventListener('click', () => { if (!b.disabled) advance(); }));
     bottomNext.addEventListener('click', () => { if (!bottomNext.disabled) advance(); });
 
-    // ---- US phone live formatting xxx-xxx-xxxx ----
+    // ---- phone field: country selector (intl-tel-input) + US live format ----
     const phoneEl = document.getElementById('f-phone');
+    // US default, full searchable country dropdown with flags + dial code.
+    const iti = window.intlTelInput(phoneEl, {
+      initialCountry: 'us',
+      separateDialCode: true,
+      utilsScript: 'https://cdn.jsdelivr.net/npm/intl-tel-input@24.6.0/build/js/utils.js',
+    });
+    window._itiPhone = iti;
+    function selectedCountry() {
+      return (iti.getSelectedCountryData().iso2 || 'us').toUpperCase();
+    }
+    // Live formatting xxx-xxx-xxxx ONLY for US. Other countries: plain digits,
+    // validated on submit via intl-tel-input (no per-country pretty-printing).
     phoneEl.addEventListener('input', () => {
+      if (selectedCountry() !== 'US') return;   // no formatting for non-US
       let d = phoneEl.value.replace(/\D/g,'').slice(0,10);
       let out = d;
       if (d.length > 6) out = d.slice(0,3)+'-'+d.slice(3,6)+'-'+d.slice(6);
       else if (d.length > 3) out = d.slice(0,3)+'-'+d.slice(3);
       phoneEl.value = out;
+    });
+    // When the country changes, clear any US-style formatting residue.
+    phoneEl.addEventListener('countrychange', () => {
+      if (selectedCountry() !== 'US') {
+        phoneEl.value = phoneEl.value.replace(/[^\d+]/g,'');
+      }
     });
 
     // ---- birth date auto-advance between fields ----

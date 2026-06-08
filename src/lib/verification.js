@@ -1,34 +1,70 @@
 // src/lib/verification.js
-// The SMS-verification seam. Right now both functions are stubs, but they are
-// the two real points where Twilio Verify (or similar) plugs in later. The
-// rest of the entry flow calls these and doesn't care how they work inside.
+// The SMS-verification seam: two functions the entry flow calls without caring
+// how they work inside.
+//
+//   - In DEVELOPMENT (NODE_ENV !== 'production'): no real SMS. The bypass code
+//     below always passes. This can NEVER fire in production because of the env
+//     gate, so there is no way to skip verification with real users.
+//   - In PRODUCTION: Twilio Verify sends and checks the code. Twilio generates,
+//     stores, expires, and rate-limits the codes - we never handle them.
+//
+// Required env in production:
+//   TWILIO_ACCOUNT_SID         (AC...)
+//   TWILIO_AUTH_TOKEN
+//   TWILIO_VERIFY_SERVICE_SID  (VA...)  -- the Verify Service, created once.
+
+import twilio from 'twilio';
 
 const DEV_BYPASS_CODE = '000000';
+const isProd = process.env.NODE_ENV === 'production';
 
-// Step 1 of verification: "send a code to this phone."
-// Stub: in development we don't actually send anything. Later, this calls
-// Twilio Verify's "start verification" API. Returns nothing meaningful yet.
-export async function requestCode(_phoneE164) {
-  if (process.env.NODE_ENV === 'development') {
-    // No real SMS in dev. The user will just type 000 on the next screen.
-    return { sent: true, dev: true };
+// Lazily build the Twilio client so dev/test never needs the credentials and a
+// missing var only errors at the point of actually sending (with a clear msg).
+let _client = null;
+function twilioClient() {
+  if (_client) return _client;
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) {
+    throw new Error('Twilio credentials missing (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN).');
   }
-  // Production path (not built yet): call Twilio Verify here.
-  throw new Error('Real SMS sending is not configured yet.');
+  _client = twilio(sid, token);
+  return _client;
 }
 
-// Step 2 of verification: "is this code correct for this phone?"
-// Stub: in development, the code 000 always passes. The env check is what
-// makes this safe - it can NEVER bypass once NODE_ENV is not 'development'.
-// Later, this calls Twilio Verify's "check verification" API.
-export async function confirmCode(_phoneE164, code) {
-  if (process.env.NODE_ENV === 'development' && code === DEV_BYPASS_CODE) {
-    return { verified: true, dev: true };
+function verifyServiceSid() {
+  const vsid = process.env.TWILIO_VERIFY_SERVICE_SID;
+  if (!vsid) throw new Error('TWILIO_VERIFY_SERVICE_SID is not set.');
+  return vsid;
+}
+
+// Step 1: send a code to this phone (E.164).
+export async function requestCode(phoneE164) {
+  if (!isProd) {
+    // No real SMS in dev; the user types the bypass code on the next screen.
+    return { sent: true, dev: true };
   }
-  if (process.env.NODE_ENV === 'development') {
-    // In dev, only 000 works. Any other code is rejected.
+  const v = await twilioClient()
+    .verify.v2.services(verifyServiceSid())
+    .verifications.create({ to: phoneE164, channel: 'sms' });
+  // Twilio returns status 'pending' when the code has been dispatched.
+  return { sent: v.status === 'pending' };
+}
+
+// Step 2: is this code correct for this phone? Returns { verified: boolean }.
+export async function confirmCode(phoneE164, code) {
+  if (!isProd) {
+    return { verified: code === DEV_BYPASS_CODE, dev: true };
+  }
+  try {
+    const check = await twilioClient()
+      .verify.v2.services(verifyServiceSid())
+      .verificationChecks.create({ to: phoneE164, code });
+    return { verified: check.status === 'approved' };
+  } catch (err) {
+    // Twilio throws 404 when the verification has expired or was already used,
+    // and 400 for malformed input. Treat all as "not verified" rather than a
+    // 500 - the user just sees "bad code" and can request a new one.
     return { verified: false };
   }
-  // Production path (not built yet): call Twilio Verify check here.
-  throw new Error('Real SMS verification is not configured yet.');
 }

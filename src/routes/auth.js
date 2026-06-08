@@ -19,7 +19,9 @@ export default async function authRoutes(app) {
     }
     await requestCode(phoneE164);
     // We hand back the normalized phone so the next step uses the canonical form.
-    return { ok: true, phone: phoneE164, dev: process.env.NODE_ENV === 'development' };
+    // `dev` tells the entry page whether the bypass code is in effect; it mirrors
+    // the verification seam: the bypass is active in any non-production env.
+    return { ok: true, phone: phoneE164, dev: process.env.NODE_ENV !== 'production' };
   });
 
   // Confirm the code, then log the user in (creating them if new).
