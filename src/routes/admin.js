@@ -9,7 +9,7 @@
 import {
   adminPasswordIsSet, checkPassword, setAdminSession, clearAdminSession, isAdmin,
 } from '../lib/admin-auth.js';
-import { listUsers, getUserBasic, getConversation } from '../lib/admin-data.js';
+import { listUsers, getUserBasic, getConversation, archiveUser, unarchiveUser, deleteUser } from '../lib/admin-data.js';
 import { getDraft } from '../lib/editor-data.js';
 import {
   getPublished, listVersions, reloadVersion, saveAndPublish,
@@ -113,8 +113,30 @@ export default async function adminRoutes(app) {
 
   // --- users list (JSON) ---------------------------------------------------
   app.get(`${BASE}/api/users`, async (request, reply) => {
-    const users = await listUsers();
+    const includeArchived = request.query?.archived === '1' || request.query?.archived === 'true';
+    const users = await listUsers(includeArchived);
     return { users };
+  });
+
+  // --- archive / unarchive a user (reversible; hides from default list) -----
+  app.post(`${BASE}/api/users/:id/archive`, async (request, reply) => {
+    await archiveUser(request.params.id);
+    return { ok: true };
+  });
+  app.post(`${BASE}/api/users/:id/unarchive`, async (request, reply) => {
+    await unarchiveUser(request.params.id);
+    return { ok: true };
+  });
+
+  // --- delete a user and ALL their data (irreversible) ---------------------
+  // Requires the client to send { confirm: 'DELETE' } as a final server-side
+  // guard, on top of the UI confirmation popup.
+  app.post(`${BASE}/api/users/:id/delete`, async (request, reply) => {
+    if ((request.body || {}).confirm !== 'DELETE') {
+      return reply.code(400).send({ error: 'confirmation_required' });
+    }
+    const result = await deleteUser(request.params.id);
+    return { ok: true, ...result };
   });
 
   // --- conversation (JSON) -------------------------------------------------

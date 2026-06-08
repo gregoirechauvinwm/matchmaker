@@ -28,6 +28,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Ordered list of migration scripts. Keep this in dependency order; append new
 // migrations to the end as you add them.
+//
+// NOTE: migrate-task-types.js is intentionally NOT here. It is a one-time
+// historical conversion (old `tasks` table -> `task_types`) that only applies
+// to databases predating the task_types/tasks split. The current schema.sql
+// already creates both tables in their final form, so on any fresh db:init that
+// migration's guard correctly refuses to run. Do not add it to this list.
 const MIGRATIONS = [
   'migrate-tokens.js',
   'migrate-profile.js',
@@ -35,13 +41,13 @@ const MIGRATIONS = [
   'migrate-result-seq.js',
   'migrate-result-task.js',
   'migrate-app-config.js',
-  'migrate-task-types.js',
   'migrate-task-instances.js',
   'migrate-token-count.js',
   'migrate-scripted-lines.js',
   'migrate-payment-links.js',
   'migrate-ratings.js',
   'migrate-rate-lines.js',
+  'migrate-user-archive.js',
 ];
 
 function run(script) {

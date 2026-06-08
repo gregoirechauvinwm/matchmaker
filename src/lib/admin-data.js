@@ -1,20 +1,57 @@
 // src/lib/admin-data.js
 // Read queries for the back-office conversation view.
 
-import { query } from '../db/pool.js';
+import { query, pool } from '../db/pool.js';
 
 // All users, newest first, with enough to show in the list and a status.
-export async function listUsers() {
+// By default hides archived users; pass includeArchived=true to show them.
+export async function listUsers(includeArchived = false) {
   const res = await query(
     `SELECT u.id, u.phone_e164, u.created_at, u.completed_at,
-            u.name, u.photos,
+            u.name, u.photos, u.archived_at,
             u.current_task_id, u.current_task_user_message_count,
             t.name AS current_task_name
        FROM users u
        LEFT JOIN task_types t ON t.id = u.current_task_id
+      ${includeArchived ? '' : 'WHERE u.archived_at IS NULL'}
       ORDER BY u.created_at DESC`
   );
   return res.rows;
+}
+
+// Archive / unarchive: reversible, hides from the default list only. Does not
+// touch the user's data or their login - an archived user can still log in.
+export async function archiveUser(userId) {
+  await query(`UPDATE users SET archived_at = now() WHERE id = $1`, [userId]);
+}
+export async function unarchiveUser(userId) {
+  await query(`UPDATE users SET archived_at = NULL WHERE id = $1`, [userId]);
+}
+
+// Hard delete: removes the user and ALL their data, in one transaction. After
+// this the phone number is free again - re-registering starts a fresh account.
+//
+// Order matters: child rows whose FKs do NOT cascade must go first, then the
+// user row (whose deletion cascades turns->prompt_results, media, rating_*).
+//   non-cascading: payment_links, tasks
+//   cascading on user delete: turns (->prompt_results), media,
+//                             rating_sessions (->ratings, ->rating_session_photos),
+//                             rating_links
+export async function deleteUser(userId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM payment_links WHERE user_id = $1`, [userId]);
+    await client.query(`DELETE FROM tasks WHERE user_id = $1`, [userId]);
+    const res = await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    await client.query('COMMIT');
+    return { deleted: res.rowCount > 0 };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function getUserBasic(userId) {

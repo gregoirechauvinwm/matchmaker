@@ -22,7 +22,8 @@ function selectedUserId() {
 const ORDER = { detection: 0, evaluation: 1, whisperer: 2, speaker: 3 };
 
 async function loadUsers() {
-  const res = await fetch('/wm-admin/api/users');
+  const showArchived = !!document.getElementById('show-archived')?.checked;
+  const res = await fetch('/wm-admin/api/users' + (showArchived ? '?archived=1' : ''));
   if (res.status === 401 || res.redirected) { location.href = '/wm-admin/login'; return; }
   const { users } = await res.json();
   const sel = selectedUserId();
@@ -33,12 +34,13 @@ async function loadUsers() {
     const avatar = photo
       ? `<img class="u-photo" src="${esc(photo)}" alt="">`
       : `<div class="u-photo u-photo-blank">${esc((u.name || '?').slice(0,1))}</div>`;
-    return `<li class="user-item ${u.id === sel ? 'active' : ''}" data-id="${u.id}">
+    const archivedTag = u.archived_at ? ' <span class="u-archived">archived</span>' : '';
+    return `<li class="user-item ${u.id === sel ? 'active' : ''}" data-id="${u.id}" data-archived="${u.archived_at ? '1' : '0'}">
       ${avatar}
       <div class="u-meta">
         ${u.name ? `<div class="u-name">${esc(u.name)}</div>` : ''}
         <div class="u-phone">${esc(u.phone_e164)}</div>
-        <div class="u-status">${esc(status)}</div>
+        <div class="u-status">${esc(status)}${archivedTag}</div>
       </div>
     </li>`;
   }).join('') || '<li class="muted" style="padding:12px 16px">No users yet.</li>';
@@ -52,6 +54,9 @@ async function loadUsers() {
     });
   });
 }
+
+// Re-load the list when the archived toggle changes.
+document.getElementById('show-archived')?.addEventListener('change', loadUsers);
 
 let resultCache = {}; // key -> result object, for the completion panel
 
@@ -78,7 +83,43 @@ function profileCard(u) {
       ${row('Children', u.has_kids)}
     </div>
     ${photos ? `<div class="pf-photos">${photos}</div>` : ''}
+    <div class="pf-actions" style="margin-top:14px;display:flex;gap:8px">
+      <button class="pf-archive link" data-id="${u.id}">${u.archived_at ? 'Unarchive' : 'Archive'}</button>
+      <button class="pf-delete link" data-id="${u.id}" style="color:#FF3B30">Delete user</button>
+    </div>
   </div>`;
+}
+
+// Wire the archive/delete buttons inside a freshly-rendered profile card.
+function wireProfileActions(container, userId) {
+  const archiveBtn = container.querySelector('.pf-archive');
+  const deleteBtn = container.querySelector('.pf-delete');
+  if (archiveBtn) archiveBtn.addEventListener('click', async () => {
+    const unarchiving = archiveBtn.textContent.trim() === 'Unarchive';
+    const r = await fetch(`/wm-admin/api/users/${userId}/${unarchiving ? 'unarchive' : 'archive'}`, { method: 'POST' });
+    if (r.ok) { await loadUsers(); await loadConversation(userId); }
+    else alert('Could not update archive status.');
+  });
+  if (deleteBtn) deleteBtn.addEventListener('click', async () => {
+    const typed = prompt(
+      'PERMANENTLY DELETE this user and ALL their data?\n' +
+      'This cannot be undone. The phone number will be freed for fresh re-registration.\n\n' +
+      'Type  DELETE  to confirm:'
+    );
+    if (typed !== 'DELETE') { if (typed !== null) alert('Cancelled - nothing was deleted.'); return; }
+    const r = await fetch(`/wm-admin/api/users/${userId}/delete`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: 'DELETE' }),
+    });
+    if (r.ok) {
+      alert('User deleted.');
+      history.pushState({}, '', '/wm-admin');
+      convoEl.innerHTML = '<div class="muted" style="padding:16px">Select a user.</div>';
+      await loadUsers();
+    } else {
+      alert('Delete failed.');
+    }
+  });
 }
 
 async function loadConversation(userId) {
@@ -138,6 +179,7 @@ async function loadConversation(userId) {
     blocks.push(`<div class="turn">${parts.join('')}</div>`);
   }
   convoEl.innerHTML = blocks.join('') || '<div class="muted" style="padding:16px">No messages yet.</div>';
+  wireProfileActions(convoEl, userId);
 
   convoEl.querySelectorAll('.seecomp').forEach((a) => {
     a.addEventListener('click', (e) => {
