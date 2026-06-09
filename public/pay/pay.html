@@ -108,6 +108,18 @@
     /* pay buttons (hidden until selection) */
     .pays { margin-top: 28px; display: none; flex-direction: column; align-items: center; gap: 20px; }
     .pays.show { display: flex; }
+    /* While a new option's PaymentIntent is being created, hide the buttons and
+       show a centered spinner. Buttons are also pointer-events:none so a stale
+       wallet/card tap can't fire against the previous amount. */
+    .pays-buttons { display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; }
+    .pays-spinner { display: none; height: 54px; align-items: center; justify-content: center; }
+    .pays-spinner .spin {
+      width: 26px; height: 26px; border: 2.5px solid #e3e3e3; border-top-color: #111;
+      border-radius: 50%; animation: payspin .8s linear infinite;
+    }
+    @keyframes payspin { to { transform: rotate(360deg); } }
+    .pays.loading .pays-buttons { display: none; }
+    .pays.loading .pays-spinner { display: flex; }
     .btn { width: 329px; max-width: 100%; height: 54px; border: none; border-radius: 360px;
       font-family: var(--cp); font-weight: 600; font-size: 22px; cursor: pointer;
       display: grid; place-items: center; }
@@ -187,8 +199,11 @@
       <div class="cards" id="cards"></div>
 
       <div class="pays" id="pays">
-        <div id="express-checkout-element"></div>
-        <button class="btn cc" id="btn-card">Pay with credit card</button>
+        <div class="pays-spinner" id="pays-spinner"><div class="spin"></div></div>
+        <div class="pays-buttons" id="pays-buttons">
+          <div id="express-checkout-element"></div>
+          <button class="btn cc" id="btn-card">Pay with credit card</button>
+        </div>
       </div>
     </div>
 
@@ -256,7 +271,7 @@
       });
     }
 
-    let stripe = null, elements = null, paymentElement = null, eceMounted = false;
+    let stripe = null, elements = null, paymentElement = null, expressElement = null;
     let clientSecret = null;
     const returnUrl = location.origin + '/pay/' + token + '/return';
 
@@ -266,6 +281,7 @@
         el.classList.toggle('selected', el.dataset.id === id);
       });
       paysEl.classList.add('show');
+      paysEl.classList.add('loading');   // spinner until the new intent is ready
       footerEl.innerHTML = 'Full cash refund if the date is canceled';
       // Create/refresh the PaymentIntent for the chosen option, then (re)mount.
       setupPayment();
@@ -280,7 +296,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ option_id: selected.id }),
         });
-        if (!res.ok) { showError('Could not start payment. Please try again.'); return; }
+        if (!res.ok) { paysEl.classList.remove('loading'); showError('Could not start payment. Please try again.'); return; }
         const data = await res.json();
         clientSecret = data.client_secret;
 
@@ -301,20 +317,21 @@
 
         // Express Checkout Element (Apple Pay / Google Pay) - only shows when a
         // wallet is available AND the domain is verified (production).
-        if (!eceMounted) {
-          const ece = elements.create('expressCheckout', {
-            buttonHeight: 54,
-            // Stripe maps appearance.variables.borderRadius; this is a belt-and-
-            // suspenders for the wallet button shape.
-          });
-          ece.on('confirm', async () => {
-            const { error } = await stripe.confirmPayment({ elements, confirmParams: { return_url: returnUrl } });
-            if (error) showError(error.message);
-          });
-          ece.mount('#express-checkout-element');
-          eceMounted = true;
-        }
+        // IMPORTANT: this must be re-created on every option change so the wallet
+        // sheet is bound to the CURRENT intent/amount. Mounting once (the old
+        // `eceMounted` guard) left Apple Pay bound to the first option's amount,
+        // so switching tokens showed the wrong price and confirmation failed.
+        if (expressElement) { try { expressElement.unmount(); } catch {} expressElement = null; }
+        const ece = elements.create('expressCheckout', { buttonHeight: 54 });
+        ece.on('confirm', async () => {
+          const { error } = await stripe.confirmPayment({ elements, confirmParams: { return_url: returnUrl } });
+          if (error) showError(error.message);
+        });
+        ece.mount('#express-checkout-element');
+        expressElement = ece;
+        paysEl.classList.remove('loading');   // buttons ready
       } catch {
+        paysEl.classList.remove('loading');
         showError('Could not start payment. Please try again.');
       }
     }

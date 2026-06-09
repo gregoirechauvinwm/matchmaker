@@ -280,8 +280,8 @@
       <section class="step" data-type="birth">
         <div class="title-block"><p class="title">What's your birth date?</p></div>
         <div class="segments">
-          <input class="field seg" id="b-dd" inputmode="numeric" maxlength="2" placeholder="dd">
           <input class="field seg" id="b-mm" inputmode="numeric" maxlength="2" placeholder="mm">
+          <input class="field seg" id="b-dd" inputmode="numeric" maxlength="2" placeholder="dd">
           <input class="field seg" id="b-yyyy" inputmode="numeric" maxlength="4" placeholder="yyyy">
         </div>
         <p class="field-error" id="err-birth"></p>
@@ -505,7 +505,7 @@
         const el = document.getElementById(focusId);
         if (focusNow) el.focus(); else setTimeout(() => el.focus(), 350);
       } else if (type === 'birth') {
-        const el = document.getElementById('b-dd');
+        const el = document.getElementById('b-mm');
         if (focusNow) el.focus(); else setTimeout(() => el.focus(), 350);
       } else if (type === 'code') {
         const el = steps[n].querySelector('.seg.code');
@@ -792,8 +792,8 @@
 
     // ---- birth date auto-advance between fields ----
     const bDD = document.getElementById('b-dd'), bMM = document.getElementById('b-mm'), bYYYY = document.getElementById('b-yyyy');
-    bDD.addEventListener('input', () => { if (bDD.value.length === 2) bMM.focus(); });
-    bMM.addEventListener('input', () => { if (bMM.value.length === 2) bYYYY.focus(); });
+    bMM.addEventListener('input', () => { if (bMM.value.length === 2) bDD.focus(); });
+    bDD.addEventListener('input', () => { if (bDD.value.length === 2) bYYYY.focus(); });
     bYYYY.addEventListener('input', () => { if (bYYYY.value.length === 4 && stepValid(steps[i])) advance(); });
 
     // ---- code 6-segment auto-advance ----
