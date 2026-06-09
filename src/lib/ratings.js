@@ -4,7 +4,7 @@
 // SOURCE OF TRUTH is the per-user rating_sessions row (its completed_at), NOT
 // the link. Several [RATE_PHOTOS] cards can be sent; each mints a fresh
 // /rate/{token} link, but all of a user's links resolve to the SAME resumable
-// session. The session's photo list is shuffled and FROZEN at creation
+// session. The session's photo list is ordered sequentially and FROZEN at creation
 // (rating_session_photos), so multi-gender mixing stays compatible with
 // "resume where you left off" and "all photos scored = complete".
 
@@ -79,14 +79,16 @@ export async function ensureSession(userId) {
     }
     const session = sess.rows[0];
 
-    // Pull the active photos for the chosen buckets, shuffle, and freeze the
-    // order into rating_session_photos. This is the per-session mixed list.
+    // Pull the active photos for the chosen buckets in deterministic order
+    // (by gender bucket, then position) and freeze that order into
+    // rating_session_photos. Sequential so members appear 1,2,3... as seeded.
     const photos = await client.query(
       `SELECT id FROM rating_photos
-        WHERE is_active AND gender_bucket = ANY($1::text[])`,
+        WHERE is_active AND gender_bucket = ANY($1::text[])
+        ORDER BY gender_bucket, position`,
       [buckets]
     );
-    const ids = shuffle(photos.rows.map((r) => r.id));
+    const ids = photos.rows.map((r) => r.id);
     for (let pos = 0; pos < ids.length; pos++) {
       await client.query(
         `INSERT INTO rating_session_photos (session_id, photo_id, position)

@@ -104,12 +104,27 @@
       flex-direction: column; align-items: center; justify-content: center; gap: 14px;
       text-align: center; padding: 24px;
     }
-    .done-state .spin {
+    /* Loading overlay shown until the first photo is decoded. */
+    .loading-state {
+      position: absolute; inset: 0; display: flex;
+      align-items: center; justify-content: center;
+    }
+    .done-state .spin, .loading-state .spin {
       width: 26px; height: 26px; border: 2.5px solid #ddd; border-top-color: #111;
       border-radius: 50%; animation: spin .8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .done-state .lbl { font-size: 20px; }
+    /* Completion screen */
+    .done-state .check-circle {
+      width: 64px; height: 64px; border-radius: 50%; background: #34C759;
+      display: grid; place-items: center; margin-bottom: 4px;
+    }
+    .done-state .done-title { font-size: 22px; font-weight: 600; color: #111; }
+    .done-state .done-sub { font-size: 16px; color: var(--muted); margin-top: -6px; }
+    .done-state .done-btn {
+      margin-top: 18px; padding: 13px 28px; border: none; border-radius: 360px;
+      background: #111; color: #fff; font-size: 16px; cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -120,9 +135,16 @@
     </div>
     <div class="title" id="title">Is this someone you&rsquo;d date?</div>
     <div class="stage" id="stage">
-      <div class="done-state" id="done">
+      <div class="loading-state" id="loading">
         <div class="spin"></div>
-        <div class="lbl">All done — taking you back…</div>
+      </div>
+      <div class="done-state" id="done">
+        <div class="check-circle">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>
+        </div>
+        <div class="done-title">Preference registered</div>
+        <div class="done-sub">Thank you for your feedback.</div>
+        <button class="done-btn" id="done-back">Back to chat</button>
       </div>
     </div>
   </div>
@@ -144,6 +166,7 @@
     const bar = document.getElementById('bar');
     const titleEl = document.getElementById('title');
     const doneEl = document.getElementById('done');
+    const loadingEl = document.getElementById('loading');
 
     let photos = [];     // [{ id, url, score }]
     let slides = [];      // DOM nodes, parallel to photos
@@ -153,6 +176,7 @@
     let total = 0;
 
     document.getElementById('close').addEventListener('click', () => { window.location.href = '/chat'; });
+    document.getElementById('done-back').addEventListener('click', () => { window.location.href = '/chat'; });
 
     // --- windowed preload ----------------------------------------------------
     // Kick off loading for [from .. from+PRELOAD_AHEAD]. Each <img> downloads +
@@ -230,15 +254,16 @@
     }
 
     async function finish() {
-      // Show the done state, fire completion (idempotent), then return to chat
-      // where the scripted success line is waiting (revealed with typing).
+      // Show the completion screen (check + thank you + Back to chat button),
+      // and fire completion (idempotent). The user taps the button to return.
+      if (loadingEl) loadingEl.style.display = 'none';
       slides.forEach((s) => s.classList.remove('active'));
+      const t1 = document.getElementById('title'); if (t1) t1.style.visibility = 'hidden';
       doneEl.style.display = 'flex';
       try {
         await fetch(`/rate/${token}/complete`, { method: 'POST' });
       } catch {}
       try { sessionStorage.setItem('justRated', '1'); } catch {}
-      setTimeout(() => { window.location.href = '/chat'; }, 700);
     }
 
     // --- build the slides ----------------------------------------------------
@@ -297,10 +322,17 @@
       photos = (data.photos || []).map((p) => ({ id: p.id, url: p.url, score: p.score ?? null }));
       total = photos.length;
 
-      // Nothing to rate, or already complete -> just go back.
-      if (total === 0 || data.complete) {
-        if (data.complete) { try { sessionStorage.setItem('justRated', '1'); } catch {} }
+      // Nothing to rate -> go back. Already complete -> show the completion
+      // screen (don't silently bounce), let the user return via the button.
+      if (total === 0) {
         window.location.href = '/chat';
+        return;
+      }
+      if (data.complete) {
+        try { sessionStorage.setItem('justRated', '1'); } catch {}
+        if (loadingEl) loadingEl.style.display = 'none';
+        const t0 = document.getElementById('title'); if (t0) t0.style.visibility = 'hidden';
+        doneEl.style.display = 'flex';
         return;
       }
 
@@ -312,7 +344,7 @@
       preloadAround(start);
 
       const startImg = imgs[start];
-      const reveal = () => showSlide(start);
+      const reveal = () => { if (loadingEl) loadingEl.style.display = 'none'; showSlide(start); };
       if (startImg && startImg.decode && startImg.dataset.started) {
         startImg.decode().then(reveal).catch(reveal);
       } else {
