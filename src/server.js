@@ -36,6 +36,25 @@ await app.register(fastifyStatic, {
   prefix: '/',
 });
 
+// Root route: send finished, logged-in users straight to /chat (no welcome
+// flash); everyone else falls through to index.html (welcome / resume flow).
+// Declared after static so reply.sendFile (added by @fastify/static) exists;
+// an explicit exact-match "/" route takes precedence over the static wildcard.
+{
+  const { getSessionUserId } = await import('./lib/session.js');
+  const { getProfile } = await import('./lib/users.js');
+  app.get('/', async (request, reply) => {
+    try {
+      const userId = getSessionUserId(request);
+      if (userId) {
+        const p = await getProfile(userId);
+        if (p && p.onboarding_done) return reply.redirect('/chat');
+      }
+    } catch { /* fall through to the static index.html */ }
+    return reply.sendFile('index.html');
+  });
+}
+
 // Entry-flow endpoints (phone verify, login).
 await app.register((await import('./routes/auth.js')).default);
 

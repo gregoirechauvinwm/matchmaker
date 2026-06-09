@@ -6,7 +6,7 @@
   <title>Form proto</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@24.6.0/build/css/intlTelInput.css" />
   <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@24.6.0/build/js/intlTelInput.min.js"></script>
   <style>
@@ -120,6 +120,48 @@
       padding: 15px; cursor: pointer; background: #000; color: #FFF9F1;
     }
     .btn:disabled { background: #EFEFF0; color: rgba(60,60,67,0.3); cursor: default; }
+    .btn-secondary { background: #DFDFDF; color: #000; }
+
+    /* ===== Welcome / landing step (logged-out entry) ===== */
+    .welcome-step {
+      padding: 0;                 /* full-bleed; override the standard .step padding */
+      overflow: hidden;
+      background: #fff;
+    }
+    /* Torn paper from the paywall, flipped vertically + pinned to the TOP. */
+    .welcome-torn {
+      position: absolute; top: 0; left: 0; right: 0;
+      width: 100%; height: auto;
+      transform: scale(-1, -1); z-index: 1; pointer-events: none; display: block;
+    }
+    .welcome-logo {
+      position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+      width: 96px; height: auto; z-index: 2;
+    }
+    .welcome-close {
+      position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 18px;
+      font-size: 28px; line-height: 1; background: none; border: none; color: #000;
+      cursor: pointer; padding: 4px; z-index: 3;
+    }
+    /* Centered title block, vertically centered in the screen. */
+    .welcome-center {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 0 24px; z-index: 2;
+    }
+    .welcome-title {
+      margin: 0; font-family: var(--cp); font-weight: 400; font-size: 32px;
+      letter-spacing: -0.04em; color: #000; line-height: 1.15;
+    }
+    .welcome-brand { font-weight: 700; font-size: 35px; letter-spacing: -0.04em; }
+    /* Buttons + footer pinned near the bottom. */
+    .welcome-actions {
+      position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom));
+      padding: 0 24px; display: flex; flex-direction: column; gap: 12px; z-index: 2;
+    }
+    .welcome-foot {
+      margin: 6px 0 0; font-family: var(--cp); font-weight: 400; font-size: 16px;
+      text-align: center; color: #000;
+    }
 
     /* segmented inputs (birth, code) */
     .segments { display: flex; gap: 12px; }
@@ -161,7 +203,7 @@
 </head>
 <body>
   <div class="app">
-    <div class="topnav">
+    <div class="topnav" id="topnav">
       <button class="back" id="back" aria-label="Back">
         <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
@@ -169,6 +211,21 @@
     </div>
 
     <div class="shell" id="shell">
+      <!-- 0 welcome / landing (default for logged-out users) -->
+      <section class="step welcome-step" data-type="welcome">
+        <img class="welcome-torn" src="/pay/torn-edge.png" alt="" />
+        <img class="welcome-logo" src="/logo.png" alt="amata" />
+        <button class="welcome-close" id="welcome-close" aria-label="Close">&times;</button>
+        <div class="welcome-center">
+          <p class="welcome-title">Let's set you up<br>on your<br><span class="welcome-brand">Blind Tuesdate</span></p>
+        </div>
+        <div class="welcome-actions">
+          <button class="btn" id="welcome-apply">Apply now</button>
+          <button class="btn btn-secondary" id="welcome-login">Log in</button>
+          <p class="welcome-foot">By signing in or applying, you agree to our terms.</p>
+        </div>
+      </section>
+
       <!-- 1 phone -->
       <section class="step" data-type="input" data-focus="f-phone">
         <div class="title-block">
@@ -425,6 +482,10 @@
     const FOOT = { agerange: 'Not visible by other users', intro: 'Never share sensitive data to your AI or other users' };
 
     function show(n, focusNow) {
+      // The welcome/landing step is full-bleed: hide the back/progress topnav.
+      const isWelcome = steps[n] && steps[n].dataset.type === 'welcome';
+      const tn = document.getElementById('topnav');
+      if (tn) tn.style.display = isWelcome ? 'none' : 'flex';
       steps.forEach((s, idx) => {
         s.classList.toggle('active', idx === n);
         s.classList.toggle('left', idx < n);
@@ -831,6 +892,14 @@
     }));
 
     document.getElementById('back').addEventListener('click', () => { if (i>0){i--;show(i);} });
+    // Welcome step: both buttons advance to the phone step (index 1); close exits to the homepage.
+    const wApply = document.getElementById('welcome-apply');
+    const wLogin = document.getElementById('welcome-login');
+    const goPhone = () => { i = 1; show(1); };
+    if (wApply) wApply.addEventListener('click', goPhone);
+    if (wLogin) wLogin.addEventListener('click', goPhone);
+    const wClose = document.getElementById('welcome-close');
+    if (wClose) wClose.addEventListener('click', () => { window.location.href = 'https://blindtuesdate.com'; });
     document.getElementById('under18-back').addEventListener('click', () => {
       document.getElementById('under18').style.display='none';
       // go back to the birth step
