@@ -36,8 +36,8 @@ await app.register(fastifyStatic, {
   prefix: '/',
 });
 
-// Root route: send finished, logged-in users straight to /chat (no welcome
-// flash); everyone else falls through to index.html (welcome / resume flow).
+// Root route: send finished, logged-in users straight to /chat; everyone else
+// falls through to index.html (the onboarding flow, starting at the phone step).
 // Declared after static so reply.sendFile (added by @fastify/static) exists;
 // an explicit exact-match "/" route takes precedence over the static wildcard.
 {
