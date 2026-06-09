@@ -30,9 +30,13 @@ const IMAGE_RE = /\.(jpe?g|png|webp)$/i;
 function filesFor(bucket) {
   const dir = join(POOL_DIR, bucket);
   if (!existsSync(dir)) return [];
+  // Natural sort: order by the first number in the filename so 2.jpg < 10.jpg
+  // (plain .sort() is lexicographic, which would put "10" before "2"). Files
+  // without a number fall back to localeCompare, and ties break by filename.
+  const numOf = (f) => { const m = f.match(/\d+/); return m ? parseInt(m[0], 10) : Infinity; };
   return readdirSync(dir)
     .filter((f) => IMAGE_RE.test(f) && !f.startsWith('.'))
-    .sort(); // 01.jpg, 02.jpg, ... -> stable position order
+    .sort((a, b) => (numOf(a) - numOf(b)) || a.localeCompare(b));
 }
 
 async function main() {

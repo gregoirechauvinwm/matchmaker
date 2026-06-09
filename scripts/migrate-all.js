@@ -48,6 +48,7 @@ const MIGRATIONS = [
   'migrate-ratings.js',
   'migrate-rate-lines.js',
   'migrate-user-archive.js',
+  'migrate-neighborhood.js',
 ];
 
 function run(script) {

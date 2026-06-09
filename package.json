@@ -26,6 +26,7 @@
     "migrate:ratings": "node scripts/migrate-ratings.js",
     "migrate:rate-lines": "node scripts/migrate-rate-lines.js",
     "migrate:user-archive": "node scripts/migrate-user-archive.js",
+    "migrate:neighborhood": "node scripts/migrate-neighborhood.js",
     "seed:rating-photos": "node scripts/seed-rating-photos.js",
     "migrate:all": "node scripts/migrate-all.js"
   },

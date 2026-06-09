@@ -49,6 +49,7 @@ export default async function onboardingRoutes(app) {
     if (b.religion !== undefined) fields.religion = Array.isArray(b.religion) ? b.religion : null;
     if (b.ethnicity !== undefined) fields.ethnicity = Array.isArray(b.ethnicity) ? b.ethnicity : null;
     if (b.has_kids !== undefined) fields.has_kids = !!b.has_kids;
+    if (b.neighborhood !== undefined) fields.neighborhood = String(b.neighborhood).trim();
     if (b.partner_age_min !== undefined) fields.partner_age_min = parseInt(b.partner_age_min, 10);
     if (b.partner_age_max !== undefined) fields.partner_age_max = parseInt(b.partner_age_max, 10);
     if (b.chosen_amata !== undefined) fields.chosen_amata = b.chosen_amata;

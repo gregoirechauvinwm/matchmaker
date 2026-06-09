@@ -18,7 +18,11 @@
       -webkit-text-size-adjust: 100%;
       position: fixed; inset: 0; width: 100%; overflow: hidden; overscroll-behavior: none;
     }
-    .app { display: flex; flex-direction: column; height: 100dvh; height: 100vh; height: 100dvh; overflow: hidden; }
+    /* Cap the flow width on desktop and center it (phone-like column). On mobile,
+       100% stays below the cap so nothing changes there. The slider is unaffected:
+       each .step is 100% of this (now-capped) width and translateX(100%) slides by
+       that same width, so the math stays self-consistent. */
+    .app { display: flex; flex-direction: column; height: 100dvh; height: 100vh; height: 100dvh; overflow: hidden; width: 100%; max-width: 480px; margin: 0 auto; }
 
     .topnav { flex: 0 0 auto; padding: calc(10px + env(safe-area-inset-top)) 20px 0; display: flex; align-items: center; gap: 14px; }
     .back { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; cursor: pointer; background: none; border: none; padding: 0; }
@@ -39,8 +43,16 @@
       transition: transform .32s cubic-bezier(.33,1,.68,1), opacity .25s ease;
       pointer-events: none; overflow: hidden;
     }
-    /* Only steps with long option lists may scroll; input steps stay fixed. */
-    .step[data-type="multi"], .step[data-type="avatar"] { overflow-y: auto; }
+    /* Steps with long option lists may scroll vertically; short input steps are
+       unaffected (overflow-y:auto only scrolls when content actually overflows).
+       This is the vertical axis only - the .shell horizontal clip (focus-scroll
+       fix) is a different element/axis and is untouched.
+       padding-bottom gives the last option room to scroll fully into view; without
+       it, an overflowing list can't expose its final item above the screen edge. */
+    .step[data-type="multi"], .step[data-type="avatar"], .step[data-type="single"] {
+      overflow-y: auto;
+      padding-bottom: calc(40px + env(safe-area-inset-bottom));
+    }
     .step.active { transform: translateX(0); opacity: 1; pointer-events: auto; }
     .step.left { transform: translateX(-100%); opacity: 0; }
 
@@ -132,14 +144,17 @@
     .photo-grid.two .photo-add { width: 42px; height: 42px; }
     .photo-grid.six .photo-add { width: 32px; height: 32px; }
 
-    .avatar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; justify-items: center; }
+    /* margin:auto on the cross axis centers the grid vertically within the flex
+       column step when there's spare room; when content is tall it still scrolls
+       normally (margin:auto only consumes free space). */
+    .avatar-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; justify-items: center; margin: auto 0; }
     .avatar { width: 95px; height: 95px; border-radius: 50%; position: relative; cursor: pointer; }
     .avatar .ph { width: 95px; height: 95px; border-radius: 50%; display: block; }
     .avatar.selected .ph { box-shadow: inset 0 0 0 3px #6474ff; }
     .avatar .check { position: absolute; bottom: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; background: #6474ff; display: none; place-items: center; border: 2px solid #fff; }
     .avatar.selected .check { display: grid; }
 
-    .intro-img { width: 100%; max-width: 280px; height: 300px; margin: 0 auto; border-radius: 16px; background: linear-gradient(135deg,#e8e0d0,#cfc3aa); }
+    .intro-img { width: 100%; max-width: 280px; height: 300px; margin: 0 auto; border-radius: 16px; background: linear-gradient(135deg,#e8e0d0,#cfc3aa); background-size: cover; background-position: center; background-repeat: no-repeat; }
     .gen-img { width: 220px; height: 220px; margin: 30px auto 0; border-radius: 50%; background: linear-gradient(135deg,#a98bd6,#6f57c2); box-shadow: 0 0 0 6px rgba(100,116,255,.35), 0 0 0 12px rgba(100,116,255,.18); animation: pulse 1.4s ease-in-out infinite; }
     @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
   </style>
@@ -258,12 +273,29 @@
           <p class="title">How old should<br>they be?</p>
           <p class="para">Select the ideal age range for your partner. We ask for a minimum 5-year range.</p>
         </div>
-        <p class="range-label">Between <span id="age-lo">18</span> and <span id="age-hi">35</span></p>
+        <p class="range-label">Between <span id="age-lo">25</span> and <span id="age-hi">45</span></p>
         <div class="dual" id="dual">
           <div class="dual-track"></div>
           <div class="dual-fill" id="dual-fill"></div>
-          <input type="range" id="age-min" min="18" max="75" value="18" />
-          <input type="range" id="age-max" min="18" max="75" value="35" />
+          <input type="range" id="age-min" min="18" max="75" value="25" />
+          <input type="range" id="age-max" min="18" max="75" value="45" />
+        </div>
+      </section>
+
+      <!-- 8b where do you live -->
+      <section class="step" data-type="single">
+        <div class="title-block"><p class="title">Where do you live?</p></div>
+        <div class="opts" data-single>
+          <button class="opt">Lower Manhattan</button>
+          <button class="opt">Midtown Manhattan</button>
+          <button class="opt">Upper Manhattan</button>
+          <button class="opt">Brooklyn</button>
+          <button class="opt">Queens</button>
+          <button class="opt">Bronx</button>
+          <button class="opt">New Jersey</button>
+          <button class="opt">Long Island</button>
+          <button class="opt">Staten Island</button>
+          <button class="opt">I don't live near NYC</button>
         </div>
       </section>
 
@@ -326,21 +358,24 @@
       <!-- 13 photos -->
       <section class="step" data-type="photos">
         <div class="title-block">
-          <p class="title">Add at least<br>2 photos of you</p>
-          <p class="para" id="photo-sub" style="display:none">It will increase your chances of getting intros.</p>
+          <p class="title" id="photo-title">Add at least<br>2 photos of you</p>
+          <p class="para" id="photo-sub">Pictures of our members help us understand their preferences and verify their identity. They will never be shown to your matches before a blind date.</p>
         </div>
         <div class="photo-grid two" id="photo-grid"></div>
       </section>
 
       <!-- 14 amata intro -->
       <section class="step" data-type="intro">
-        <div class="title-block"><p class="title">Now let's create your<br>AI matchmaker</p></div>
-        <div class="intro-img"></div>
+        <div class="title-block">
+          <p class="title">Now let's create<br>your AI assistant</p>
+          <p class="para">Your AI assistant learns about you, prepares your profile for our human matchmakers, and coordinates your date bookings.</p>
+        </div>
+        <div class="intro-img" id="intro-img"></div>
       </section>
 
       <!-- 15 choose amata -->
       <section class="step" data-type="avatar">
-        <div class="title-block"><p class="title">Choose your AI matchmaker<br>We call them "Amatas"</p></div>
+        <div class="title-block"><p class="title">Choose your AI assistant<br>We call them "Amatas"</p></div>
         <div class="avatar-grid" id="avatar-grid"></div>
       </section>
 
@@ -387,7 +422,7 @@
     // Steps that use the bottom-stuck footer (non keyboard-input steps that need a button).
     const BOTTOM = { multi: true, agerange: true, photos: true, intro: true, avatar: true };
     // optional footer text per type
-    const FOOT = { agerange: 'Not visible by other users', photos: 'It will increase your chances of getting intros.', intro: 'Our AI is not perfect yet. It can have some glitches. Never share sensitive data.' };
+    const FOOT = { agerange: 'Not visible by other users', intro: 'Never share sensitive data to your AI or other users' };
 
     function show(n, focusNow) {
       steps.forEach((s, idx) => {
@@ -414,6 +449,20 @@
       } else if (type === 'code') {
         const el = steps[n].querySelector('.seg.code');
         if (focusNow) el.focus(); else setTimeout(() => el.focus(), 350);
+      } else if (type === 'intro') {
+        // Show the assistant image matching the user's selected gender. Gender was
+        // chosen on the "How do you identify?" step; read its selected label.
+        const genderStep = [...steps].find(st => {
+          const t = st.querySelector('.title');
+          return t && /identify/i.test(t.textContent);
+        });
+        const sel = genderStep ? genderStep.querySelector('.opt.selected') : null;
+        const label = sel ? sel.textContent.toLowerCase() : '';
+        let file = 'assistant-nb.jpg';                       // default / non-binary
+        if (/woman/.test(label)) file = 'assistant-woman.jpg';
+        else if (/\bman\b/.test(label)) file = 'assistant-man.jpg';
+        const img = document.getElementById('intro-img');
+        if (img) img.style.backgroundImage = `url("/assistants/${file}")`;
       } else if (type === 'generating') {
         // show the chosen amata inside the generating circle
         const sel = document.querySelector('.avatar.selected');
@@ -523,6 +572,7 @@
         const label = sel ? sel.textContent : '';
         const title = s.querySelector('.title').textContent;
         if (title.includes('identify')) return { gender: label };
+        if (title.includes('live')) return { neighborhood: label };
         if (title.includes('education')) return { education: label };
         if (title.includes('children')) return { has_kids: /have children/i.test(label) && !/don/i.test(label) };
         return {};
@@ -608,7 +658,17 @@
       // All other steps: background-save, then advance.
       saveStep(s);
       showError(s, '');
-      if (i < steps.length - 1) { i++; show(i); }
+      if (i < steps.length - 1) {
+        i++;
+        // If the destination is a keyboard step (input/birth/code) and we're still
+        // inside the user's tap/keypress gesture (this path is synchronous, no
+        // await), focus NOW so mobile Safari keeps the keyboard up and moves it to
+        // the next field. Delayed focus (the default) would lose the gesture and
+        // Safari would suppress the keyboard. Non-keyboard steps keep default.
+        const destType = steps[i].dataset.type;
+        const keyboardStep = destType === 'input' || destType === 'birth' || destType === 'code';
+        show(i, keyboardStep);
+      }
       else {
         // Final step done -> mark complete, go to chat.
         fetch('/onboarding/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ done: true, step: i }) })
@@ -746,7 +806,12 @@
     function renderPhotos() {
       const many=photos.length>=2;
       photoGrid.className='photo-grid '+(many?'six':'two');
-      photoSub.style.display=many?'block':'none';
+      // Title + subtitle swap once the grid expands to 6 (>=2 photos added).
+      const photoTitle=document.getElementById('photo-title');
+      if (photoTitle) photoTitle.innerHTML = many ? 'You can add up to<br>6 photos' : 'Add at least<br>2 photos of you';
+      photoSub.textContent = many
+        ? 'More photos of you help us match you better.'
+        : 'Pictures of our members help us understand their preferences and verify their identity. They will never be shown to your matches before a blind date.';
       const total=many?6:2;
       let html='';
       for (let k=0;k<total;k++){ html += photos[k] ? '<div class="photo-cell"><img src="'+photos[k]+'"></div>' : '<div class="photo-cell dashed">'+plus(!many)+'</div>'; }

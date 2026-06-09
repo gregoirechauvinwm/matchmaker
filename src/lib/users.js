@@ -51,6 +51,7 @@ const PROFILE_FIELDS = {
   gender_pref: 'gender_pref', religion: 'religion', ethnicity: 'ethnicity',
   has_kids: 'has_kids', partner_age_min: 'partner_age_min', partner_age_max: 'partner_age_max',
   photos: 'photos', chosen_amata: 'chosen_amata',
+  neighborhood: 'neighborhood',
   onboarding_step: 'onboarding_step', onboarding_done: 'onboarding_done',
 };
 
