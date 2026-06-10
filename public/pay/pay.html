@@ -63,11 +63,12 @@
     .pola .photo {
       width: 100%; height: 100%;
       object-fit: cover; object-position: center;
-      border-radius: 6px;
+      border-radius: 0;
       box-shadow: 0 4px 12px rgba(0,0,0,0.18);
     }
-    .pola.left  { left: 0;  top: 8px; transform: rotate(-8deg); z-index: 2; }
-    .pola.right { right: 0; top: 0;   transform: rotate(7deg);  z-index: 1; }
+    /* User photo (left) sits BEHIND the match photo (right). */
+    .pola.left  { left: 0;  top: 8px; transform: rotate(-8deg); z-index: 1; }
+    .pola.right { right: 0; top: 0;   transform: rotate(7deg);  z-index: 2; }
 
     .datepill {
       display: inline-block; margin-top: 18px;
@@ -184,11 +185,11 @@
       <div class="features">
         <div class="feat">
           <div class="ic"><img src="/pay/humans.png" alt="" /></div>
-          <div><div class="ft">Matches made by humans</div><div class="fd">Our matchmaking team makes the pair. Ai is just here to collect info</div></div>
+          <div><div class="ft">Matches made by humans</div><div class="fd">Every match is made by our matchmaking team. Pairs with less than 70% compatibility are not introduced.</div></div>
         </div>
         <div class="feat">
           <div class="ic"><img src="/pay/vetted.png" alt="" /></div>
-          <div><div class="ft">Vetted participants</div><div class="fd">Only the Amata members who received positive feedback after dates are accepted.</div></div>
+          <div><div class="ft">Vetted participants</div><div class="fd">Our team verifies every member application before granting access to our blind dates.</div></div>
         </div>
         <div class="feat">
           <div class="ic"><img src="/pay/manhattan.png" alt="" /></div>
