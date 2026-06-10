@@ -55,6 +55,7 @@ const MIGRATIONS = [
   'migrate-rate-lines.js',
   'migrate-user-archive.js',
   'migrate-neighborhood.js',
+  'migrate-education.js',
 ];
 
 function run(script) {

@@ -43,9 +43,10 @@ export default async function webhookRoutes(app) {
       const pi = event.data.object;
       const payToken = pi.metadata?.pay_token;
       const tokens = pi.metadata?.tokens;
+      const amountCents = typeof pi.amount === 'number' ? pi.amount : null;
       if (payToken) {
         try {
-          const result = await fulfillPayment({ payToken, tokens });
+          const result = await fulfillPayment({ payToken, tokens, amountCents });
           request.log.info({ result }, 'payment fulfilled');
         } catch (err) {
           request.log.error({ err: err.message }, 'fulfillPayment failed');

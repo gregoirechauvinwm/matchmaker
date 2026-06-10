@@ -104,20 +104,22 @@ import { getPublished } from './config-versions.js';
 // message into the user's chat. Idempotent: if the link is already marked paid,
 // it does nothing (Stripe may deliver a webhook more than once).
 // Returns { granted: boolean, tokens, userId } so the caller can log.
-export async function fulfillPayment({ payToken, tokens }) {
+export async function fulfillPayment({ payToken, tokens, amountCents = null }) {
+  const n = Number(tokens) || 0;
   // Atomically claim the link: only proceed if it exists and isn't paid yet.
+  // Persist amount_cents + tokens here (for revenue reporting) in the same
+  // write that marks it paid, so they can never drift apart.
   const claim = await query(
     `UPDATE payment_links
-        SET paid_at = now()
+        SET paid_at = now(), amount_cents = $2, tokens = $3
       WHERE token = $1 AND paid_at IS NULL
       RETURNING user_id`,
-    [payToken]
+    [payToken, amountCents, n]
   );
   if (claim.rows.length === 0) {
     return { granted: false, reason: 'already_paid_or_missing' };
   }
   const userId = claim.rows[0].user_id;
-  const n = Number(tokens) || 0;
 
   // Increment the user's token balance.
   await query(

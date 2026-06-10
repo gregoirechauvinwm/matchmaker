@@ -145,6 +145,23 @@
     .photo-grid.two .photo-add { width: 42px; height: 42px; }
     .photo-grid.six .photo-add { width: 32px; height: 32px; }
 
+    /* Upload states. The cell already has position:relative + overflow:hidden,
+       so the overlay sits on top of the preview image. */
+    .photo-cell.done img { cursor: pointer; }      /* click a finished photo to replace it */
+    .photo-cell .photo-overlay {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      background: rgba(255,255,255,0.55); pointer-events: none;
+    }
+    .photo-spinner {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 3px solid rgba(0,0,0,0.18); border-top-color: #000;
+      animation: photo-spin 0.7s linear infinite;
+    }
+    @keyframes photo-spin { to { transform: rotate(360deg); } }
+    /* Failed upload: dim the preview and show a tap-to-retry affordance. */
+    .photo-cell.error .photo-overlay { background: rgba(255,255,255,0.78); pointer-events: auto; cursor: pointer; }
+    .photo-retry { font: 600 12px/1.2 -apple-system, system-ui, sans-serif; color: #c0271c; text-align: center; padding: 0 8px; }
+
     /* margin:auto on the cross axis centers the grid vertically within the flex
        column step when there's spare room; when content is tall it still scrolls
        normally (margin:auto only consumes free space). */
@@ -491,7 +508,7 @@
       if (focusId) return document.getElementById(focusId).value.trim().length > 0;
       if (type === 'multi') return !!s.querySelector('.chk.selected');
       if (type === 'agerange' || type === 'intro') return true;
-      if (type === 'photos') return s.querySelectorAll('.photo-cell img').length >= 2;
+      if (type === 'photos') return (typeof allDone === 'function') ? allDone() : (s.querySelectorAll('.photo-cell img').length >= 2);
       if (type === 'avatar') return !!s.querySelector('.avatar.selected');
       return false;
     }
@@ -777,49 +794,113 @@
     ageMin.addEventListener('input', renderRange); ageMax.addEventListener('input', renderRange); renderRange();
 
     // ---- photos ----
+    // Single source of truth: one entry per added photo.
+    //   { preview: <dataURL>, url: <R2 url|null>, status: 'uploading'|'done'|'error', file: <File> }
+    // Continue is gated on EVERY slot being 'done' (see validate(), data-type
+    // 'photos'), so a half-finished upload can never be saved as a dropped
+    // photo - which was the prod bug.
     const photoGrid = document.getElementById('photo-grid'), photoSub = document.getElementById('photo-sub');
-    const photos = [];
-    const photoUrls = [];   // R2 URLs (what we save)
+    // var (not const) so that if validate()->allDone() runs before this block
+    // initializes, `slots` reads as undefined instead of throwing a TDZ error.
+    var slots = [];
+    // photoUrls stays as the accessor the save step reads (photos: photoUrls.filter(Boolean)).
+    // It only ever contains URLs for slots that finished, but since Continue is
+    // blocked until all are done, at save time it's always complete.
+    var photoUrls = [];
+    function syncUrls(){ photoUrls.length = 0; for (const s of slots) photoUrls.push(s.url); }
+    function allDone(){ return Array.isArray(slots) && slots.length >= 2 && slots.every(s => s.status === 'done'); }
+
+    // Multi-select input for ADDING photos.
     const fileInput = document.createElement('input');
     fileInput.type='file'; fileInput.accept='image/*'; fileInput.multiple=true; fileInput.style.display='none'; document.body.appendChild(fileInput);
-    fileInput.addEventListener('change', () => {
-      const files = [...fileInput.files];
-      if (!files.length) return;
-      let idx = 0;
-      (function readNext() {
-        if (idx >= files.length || photos.length >= 6) { renderPhotos(); fileInput.value=''; return; }
+    // Single-select input for REPLACING one photo (tap a photo to swap).
+    const replaceInput = document.createElement('input');
+    replaceInput.type='file'; replaceInput.accept='image/*'; replaceInput.style.display='none'; document.body.appendChild(replaceInput);
+    let replaceIndex = -1;
+
+    function uploadSlot(slot){
+      slot.status = 'uploading'; slot.url = null; syncUrls(); renderPhotos();
+      fetch('/onboarding/photo', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ data_url: slot.preview }),
+      }).then(res => res.ok ? res.json() : Promise.reject(new Error('http_'+res.status)))
+        .then(j => {
+          if (j && j.url) { slot.url = j.url; slot.status = 'done'; }
+          else { slot.status = 'error'; }
+          syncUrls(); renderPhotos();
+        })
+        .catch(() => { slot.status = 'error'; syncUrls(); renderPhotos(); });
+    }
+
+    function readFileToDataUrl(file){
+      return new Promise((resolve, reject) => {
         const r = new FileReader();
-        r.onload = () => {
-          const slot = photos.length;
-          photos.push(r.result);            // data URL preview (instant display)
-          photoUrls[slot] = null;           // reserve slot; fills when upload returns
-          renderPhotos();
-          // background upload to R2
-          fetch('/onboarding/photo', {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ data_url: r.result }),
-          }).then(res => res.json()).then(j => { if (j && j.url) { photoUrls[slot] = j.url; } })
-            .catch(()=>{});
-          idx++; readNext();
-        };
-        r.readAsDataURL(files[idx]);
-      })();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(r.error || new Error('read_failed'));
+        r.readAsDataURL(file);
+      });
+    }
+
+    // Add newly selected files (respecting the 6-photo cap), each uploaded
+    // independently so one slow/failed upload doesn't block the others.
+    fileInput.addEventListener('change', async () => {
+      const files = [...fileInput.files];
+      fileInput.value = '';
+      for (const file of files){
+        if (slots.length >= 6) break;
+        let preview;
+        try { preview = await readFileToDataUrl(file); } catch { continue; }
+        const slot = { preview, url:null, status:'uploading', file };
+        slots.push(slot);
+        renderPhotos();
+        uploadSlot(slot);
+      }
     });
+
+    // Replace exactly the tapped photo in place.
+    replaceInput.addEventListener('change', async () => {
+      const file = replaceInput.files && replaceInput.files[0];
+      replaceInput.value = '';
+      const i = replaceIndex; replaceIndex = -1;
+      if (!file || i < 0 || i >= slots.length) return;
+      let preview;
+      try { preview = await readFileToDataUrl(file); } catch { return; }
+      slots[i].preview = preview; slots[i].file = file;
+      uploadSlot(slots[i]);
+    });
+
     function plus(big){ const sz=big?20:16; return '<button class="photo-add"><svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>'; }
+
     function renderPhotos() {
-      const many=photos.length>=2;
-      photoGrid.className='photo-grid '+(many?'six':'two');
-      // Title + subtitle swap once the grid expands to 6 (>=2 photos added).
-      const photoTitle=document.getElementById('photo-title');
+      const many = slots.length >= 2;
+      photoGrid.className = 'photo-grid ' + (many ? 'six' : 'two');
+      const photoTitle = document.getElementById('photo-title');
       if (photoTitle) photoTitle.innerHTML = many ? 'You can add up to<br>6 photos' : 'Add at least<br>2 photos of you';
       photoSub.textContent = many
         ? 'More photos of you help us match you better.'
         : 'Pictures of our members help us understand their preferences and verify their identity. They will never be shown to your matches before a blind date.';
-      const total=many?6:2;
-      let html='';
-      for (let k=0;k<total;k++){ html += photos[k] ? '<div class="photo-cell"><img src="'+photos[k]+'"></div>' : '<div class="photo-cell dashed">'+plus(!many)+'</div>'; }
-      photoGrid.innerHTML=html;
-      photoGrid.querySelectorAll('.photo-add').forEach(b=>b.addEventListener('click',()=>fileInput.click()));
+      const total = many ? 6 : 2;
+      let html = '';
+      for (let k = 0; k < total; k++){
+        const s = slots[k];
+        if (!s){ html += '<div class="photo-cell dashed">' + plus(!many) + '</div>'; continue; }
+        let overlay = '';
+        if (s.status === 'uploading') overlay = '<div class="photo-overlay"><div class="photo-spinner"></div></div>';
+        else if (s.status === 'error') overlay = '<div class="photo-overlay"><div class="photo-retry">Upload failed<br>Tap to retry</div></div>';
+        html += '<div class="photo-cell ' + s.status + '" data-idx="' + k + '"><img src="' + s.preview + '">' + overlay + '</div>';
+      }
+      photoGrid.innerHTML = html;
+      // "+" cells open the multi-select add picker.
+      photoGrid.querySelectorAll('.photo-add').forEach(b => b.addEventListener('click', () => fileInput.click()));
+      // Cell behavior: error cell -> retry; done cell -> open single-select replace picker.
+      photoGrid.querySelectorAll('.photo-cell[data-idx]').forEach(cell => {
+        const i = parseInt(cell.getAttribute('data-idx'), 10);
+        const s = slots[i];
+        if (!s) return;
+        if (s.status === 'error') cell.addEventListener('click', () => uploadSlot(s));
+        else if (s.status === 'done') cell.addEventListener('click', () => { replaceIndex = i; replaceInput.click(); });
+      });
+      syncUrls();
       validate();
     }
     renderPhotos();

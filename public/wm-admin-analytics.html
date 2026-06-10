@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Analytics</title>
+  <link rel="stylesheet" href="/wm-admin.css" />
+  <style>
+    /* The shared .bo is a 4-column grid built for the users page; analytics only
+       has rail + main, so use a 2-column layout (rail + everything else). */
+    .bo { grid-template-columns: 76px minmax(0, 1fr) !important; }
+    .an-main { min-width: 0; overflow: auto; padding: 28px 32px; }
+    .an-section { margin-bottom: 48px; }
+    .an-head { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; max-width: 1100px; }
+    .an-title { font-size: 18px; font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
+    .an-range { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #444; }
+    .an-range select, .an-range input[type=date] {
+      font: inherit; padding: 6px 10px; border: 1px solid #c8c8c8; border-radius: 8px; background: #fff; color: #111;
+    }
+    .an-range .custom { display: none; align-items: center; gap: 6px; }
+    .an-range.is-custom .custom { display: flex; }
+    .an-total { font-size: 13px; color: #666; margin-left: auto; }
+    /* The SVG can be wider than the panel; scroll it horizontally inside the
+       chart box rather than letting it push the whole page wide. */
+    .an-chart { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; }
+    .an-empty { color: #999; font-size: 14px; padding: 40px 0; }
+    .an-loading { color: #999; font-size: 14px; padding: 40px 0; }
+    /* SVG bar text */
+    .bar-rect { rx: 4; }
+    .bar-label { font: 13px -apple-system, system-ui, sans-serif; fill: #333; }
+    .bar-count { font: 600 13px -apple-system, system-ui, sans-serif; }
+    .bar-pct   { font: 12px -apple-system, system-ui, sans-serif; }
+    .bar-top   { font: italic 13px -apple-system, system-ui, sans-serif; fill: #333; }
+  </style>
+</head>
+<body>
+  <div class="bo">
+    <!-- far-left icon rail (analytics active) -->
+    <nav class="rail">
+      <a class="rail-item" href="/wm-admin" title="Users">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>users</span>
+      </a>
+      <a class="rail-item" href="/wm-admin/prompts" title="Prompts">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span>prompts</span>
+      </a>
+      <a class="rail-item active" href="/wm-admin/analytics" title="Analytics">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
+        <span>analytics</span>
+      </a>
+      <form method="POST" action="/wm-admin/logout" class="rail-logout">
+        <button title="Log out" aria-label="Log out">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </form>
+    </nav>
+
+    <main class="an-main">
+      <!-- ===== Funnel ===== -->
+      <section class="an-section">
+        <div class="an-head">
+          <span class="an-title">User funnel</span>
+          <div class="an-range" id="funnel-range">
+            <select class="range-preset">
+              <option value="all">all time</option>
+              <option value="7">last 7 days</option>
+              <option value="30">last 30 days</option>
+              <option value="month">this month</option>
+              <option value="custom">custom…</option>
+            </select>
+            <span class="custom">
+              <input type="date" class="range-from"> <span>→</span> <input type="date" class="range-to">
+            </span>
+          </div>
+          <span class="an-total" id="funnel-total"></span>
+        </div>
+        <div class="an-chart" id="funnel-chart"><div class="an-loading">Loading…</div></div>
+      </section>
+
+      <!-- ===== Daily revenue ===== -->
+      <section class="an-section">
+        <div class="an-head">
+          <span class="an-title">Daily revenue</span>
+          <div class="an-range" id="revenue-range">
+            <select class="range-preset">
+              <option value="all">all time</option>
+              <option value="7">last 7 days</option>
+              <option value="30">last 30 days</option>
+              <option value="month">this month</option>
+              <option value="custom">custom…</option>
+            </select>
+            <span class="custom">
+              <input type="date" class="range-from"> <span>→</span> <input type="date" class="range-to">
+            </span>
+          </div>
+          <span class="an-total" id="revenue-total"></span>
+        </div>
+        <div class="an-chart" id="revenue-chart"><div class="an-loading">Loading…</div></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const COLORS = { onboarding: '#bdbdbd', task: '#6475FF', paid: '#45B758', revenue: '#6475FF' };
+
+    // --- date range control: resolves preset/custom -> {from,to} ISO or null ---
+    function isoDay(d){ return d.toISOString().slice(0,10); }
+    function resolveRange(el){
+      const preset = el.querySelector('.range-preset').value;
+      const today = new Date();
+      if (preset === 'all') return { from:null, to:null };
+      if (preset === 'custom'){
+        return { from: el.querySelector('.range-from').value || null,
+                 to:   el.querySelector('.range-to').value   || null };
+      }
+      if (preset === 'month'){
+        const first = new Date(today.getFullYear(), today.getMonth(), 1);
+        return { from: isoDay(first), to: isoDay(today) };
+      }
+      const days = parseInt(preset, 10);
+      const from = new Date(today); from.setDate(today.getDate() - (days - 1));
+      return { from: isoDay(from), to: isoDay(today) };
+    }
+    function wireRange(el, onChange){
+      const sel = el.querySelector('.range-preset');
+      sel.addEventListener('change', () => {
+        el.classList.toggle('is-custom', sel.value === 'custom');
+        if (sel.value !== 'custom') onChange();
+      });
+      el.querySelectorAll('.range-from, .range-to').forEach(i =>
+        i.addEventListener('change', () => { if (sel.value === 'custom') onChange(); }));
+    }
+    function qs(range){
+      const p = new URLSearchParams();
+      if (range.from) p.set('from', range.from);
+      if (range.to)   p.set('to', range.to);
+      const s = p.toString();
+      return s ? '?' + s : '';
+    }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    // ===== FUNNEL CHART (hand-rolled SVG) =====
+    async function loadFunnel(){
+      const el = document.getElementById('funnel-range');
+      const range = resolveRange(el);
+      const chart = document.getElementById('funnel-chart');
+      chart.innerHTML = '<div class="an-loading">Loading…</div>';
+      let data;
+      try {
+        const res = await fetch('/wm-admin/api/analytics/funnel' + qs(range));
+        if (res.status === 401 || res.redirected) { location.href = '/wm-admin/login'; return; }
+        data = await res.json();
+      } catch { chart.innerHTML = '<div class="an-empty">Failed to load.</div>'; return; }
+
+      document.getElementById('funnel-total').textContent =
+        data.totalStarted ? (data.totalStarted + ' started') : '';
+      const bars = data.bars || [];
+      if (!bars.length || !data.totalStarted){
+        chart.innerHTML = '<div class="an-empty">No users in this range.</div>';
+        return;
+      }
+      chart.innerHTML = renderFunnelSVG(bars);
+    }
+
+    function renderFunnelSVG(bars){
+      const max = Math.max(...bars.map(b => b.count), 1);
+      const barW = 52, gap = 14, padL = 24, padTop = 64, plotH = 300, padBottom = 96;
+      // small extra gap when the group changes (grey->blue->green)
+      let x = padL;
+      const positions = bars.map((b, i) => {
+        if (i > 0 && bars[i-1].group !== b.group) x += gap; // group separator
+        const pos = x; x += barW + gap; return pos;
+      });
+      const W = x + padL, H = padTop + plotH + padBottom;
+      let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" style="max-width:none;display:block" xmlns="http://www.w3.org/2000/svg">';
+      bars.forEach((b, i) => {
+        const h = Math.max(3, Math.round((b.count / max) * plotH));
+        const bx = positions[i], by = padTop + (plotH - h);
+        const cx = bx + barW / 2;
+        const color = COLORS[b.group] || '#bdbdbd';
+        // A bar is "tall" if it can comfortably hold the count + step% inside it.
+        const tall = h > 46;
+        // the bar itself
+        s += '<rect class="bar-rect" x="' + bx + '" y="' + by + '" width="' + barW + '" height="' + h + '" rx="4" fill="' + color + '"/>';
+        if (tall) {
+          // total % above the bar; count + step% stacked inside near the bottom (white).
+          s += '<text class="bar-top" x="' + cx + '" y="' + (by - 10) + '" text-anchor="middle">' + b.pctOfFirst + '%</text>';
+          s += '<text class="bar-count" x="' + cx + '" y="' + (padTop + plotH - 24) + '" text-anchor="middle" fill="#fff">' + b.count + '</text>';
+          s += '<text class="bar-pct" x="' + cx + '" y="' + (padTop + plotH - 8) + '" text-anchor="middle" fill="#fff">' + b.pctOfPrev + '%</text>';
+        } else {
+          // short bar: stack all three lines ABOVE the bar with clear spacing,
+          // so nothing overlaps. From top: total% , count , step%.
+          s += '<text class="bar-top"   x="' + cx + '" y="' + (by - 40) + '" text-anchor="middle">' + b.pctOfFirst + '%</text>';
+          s += '<text class="bar-count" x="' + cx + '" y="' + (by - 23) + '" text-anchor="middle" fill="#333">' + b.count + '</text>';
+          s += '<text class="bar-pct"   x="' + cx + '" y="' + (by - 8)  + '" text-anchor="middle" fill="#777">' + b.pctOfPrev + '%</text>';
+        }
+        // x-axis label (rotated for long task names)
+        const ly = padTop + plotH + 16;
+        s += '<text class="bar-label" x="' + cx + '" y="' + ly + '" text-anchor="end" transform="rotate(-35 ' + cx + ' ' + ly + ')">' + esc(b.label) + '</text>';
+      });
+      s += '</svg>';
+      return s;
+    }
+
+    // ===== REVENUE CHART (hand-rolled SVG) =====
+    async function loadRevenue(){
+      const el = document.getElementById('revenue-range');
+      const range = resolveRange(el);
+      const chart = document.getElementById('revenue-chart');
+      chart.innerHTML = '<div class="an-loading">Loading…</div>';
+      let data;
+      try {
+        const res = await fetch('/wm-admin/api/analytics/revenue' + qs(range));
+        if (res.status === 401 || res.redirected) { location.href = '/wm-admin/login'; return; }
+        data = await res.json();
+      } catch { chart.innerHTML = '<div class="an-empty">Failed to load.</div>'; return; }
+
+      const days = data.days || [];
+      document.getElementById('revenue-total').textContent =
+        days.length ? ('$' + (data.totalCents/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + ' total') : '';
+      if (!days.length){
+        chart.innerHTML = '<div class="an-empty">No revenue in this range.</div>';
+        return;
+      }
+      chart.innerHTML = renderRevenueSVG(days);
+    }
+
+    function renderRevenueSVG(days){
+      const maxC = Math.max(...days.map(d => d.cents), 1);
+      const barW = 54, gap = 16, padL = 56, padTop = 36, plotH = 280, padBottom = 60;
+      const W = padL + days.length * (barW + gap) + padL, H = padTop + plotH + padBottom;
+      let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" style="max-width:none;display:block" xmlns="http://www.w3.org/2000/svg">';
+      // y axis line + $ marker
+      s += '<line x1="' + (padL-12) + '" y1="' + padTop + '" x2="' + (padL-12) + '" y2="' + (padTop+plotH) + '" stroke="#ddd"/>';
+      s += '<text x="' + (padL-30) + '" y="' + (padTop-12) + '" class="bar-label">$</text>';
+      // x axis line
+      s += '<line x1="' + (padL-12) + '" y1="' + (padTop+plotH) + '" x2="' + (W-padL+12) + '" y2="' + (padTop+plotH) + '" stroke="#ddd"/>';
+      days.forEach((d, i) => {
+        const h = Math.max(2, Math.round((d.cents / maxC) * plotH));
+        const bx = padL + i * (barW + gap), by = padTop + (plotH - h);
+        const dollars = '$' + (d.cents/100).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0});
+        s += '<text class="bar-count" x="' + (bx + barW/2) + '" y="' + (by - 8) + '" text-anchor="middle" fill="#333">' + dollars + '</text>';
+        s += '<rect class="bar-rect" x="' + bx + '" y="' + by + '" width="' + barW + '" height="' + h + '" rx="4" fill="' + COLORS.revenue + '"/>';
+        const ly = padTop + plotH + 16;
+        s += '<text class="bar-label" x="' + (bx + barW/2) + '" y="' + ly + '" text-anchor="end" transform="rotate(-35 ' + (bx + barW/2) + ' ' + ly + ')">' + esc(d.date.slice(5)) + '</text>';
+      });
+      s += '</svg>';
+      return s;
+    }
+
+    // init
+    wireRange(document.getElementById('funnel-range'), loadFunnel);
+    wireRange(document.getElementById('revenue-range'), loadRevenue);
+    loadFunnel();
+    loadRevenue();
+  </script>
+</body>
+</html>

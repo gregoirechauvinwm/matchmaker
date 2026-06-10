@@ -10,6 +10,8 @@ import {
   adminPasswordIsSet, checkPassword, setAdminSession, clearAdminSession, isAdmin,
 } from '../lib/admin-auth.js';
 import { listUsers, getUserBasic, getConversation, archiveUser, unarchiveUser, deleteUser } from '../lib/admin-data.js';
+import { furthestCheckpoint } from '../lib/onboarding-progress.js';
+import { getFunnel, getDailyRevenue } from '../lib/analytics-data.js';
 import { getDraft } from '../lib/editor-data.js';
 import {
   getPublished, listVersions, reloadVersion, saveAndPublish,
@@ -114,7 +116,33 @@ export default async function adminRoutes(app) {
   // --- users list (JSON) ---------------------------------------------------
   app.get(`${BASE}/api/users`, async (request, reply) => {
     const includeArchived = request.query?.archived === '1' || request.query?.archived === 'true';
-    const users = await listUsers(includeArchived);
+    const rows = await listUsers(includeArchived);
+    // Compute the display "stage" server-side so the checkpoint logic stays in
+    // one place (onboarding-progress.js) and the browser just renders strings.
+    //   - still onboarding  -> { kind:'onboarding', label:<furthest checkpoint> }
+    //   - signed up, in task -> { kind:'task', label:<task name> }
+    //   - finished the flow  -> { kind:'completed', label:'completed' }
+    const users = rows.map((u) => {
+      let stage;
+      if (u.onboarding_done) {
+        stage = u.completed_at
+          ? { kind: 'completed', label: 'completed' }
+          : { kind: 'task', label: u.current_task_name || 'started' };
+      } else {
+        const cp = furthestCheckpoint(u);
+        stage = { kind: 'onboarding', label: cp ? cp.label : 'not started' };
+      }
+      // Return only what the list needs - not the raw profile columns.
+      return {
+        id: u.id,
+        phone_e164: u.phone_e164,
+        name: u.name,
+        photos: u.photos,
+        archived_at: u.archived_at,
+        token_count: u.token_count || 0,
+        stage,
+      };
+    });
     return { users };
   });
 
@@ -153,6 +181,20 @@ export default async function adminRoutes(app) {
   });
   app.get(`${BASE}/u/:id`, async (request, reply) => {
     return reply.sendFile('wm-admin.html', publicDir);
+  });
+
+  // --- analytics dashboard -------------------------------------------------
+  app.get(`${BASE}/analytics`, async (request, reply) => {
+    return reply.sendFile('wm-admin-analytics.html', publicDir);
+  });
+  // Both accept optional ?from=YYYY-MM-DD&to=YYYY-MM-DD (all-time if omitted).
+  app.get(`${BASE}/api/analytics/funnel`, async (request) => {
+    const { from, to } = request.query || {};
+    return getFunnel({ from: from || null, to: to || null });
+  });
+  app.get(`${BASE}/api/analytics/revenue`, async (request) => {
+    const { from, to } = request.query || {};
+    return getDailyRevenue({ from: from || null, to: to || null });
   });
 
   // === EDITOR (prompts / tasks / parts) ===================================

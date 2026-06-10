@@ -28,8 +28,15 @@ async function loadUsers() {
   const { users } = await res.json();
   const sel = selectedUserId();
   usersList.innerHTML = users.map((u) => {
-    const status = u.completed_at ? 'completed'
-      : (u.current_task_name || 'not started');
+    const stage = u.stage || { kind: 'onboarding', label: 'not started' };
+    // Stage pill: grey while onboarding, blue once signed up / in a task.
+    const stageClass = stage.kind === 'onboarding' ? 'pill-grey' : 'pill-blue';
+    const stagePill = `<span class="u-pill ${stageClass}">${esc(stage.label)}</span>`;
+    // Optional green pill: tokens purchased.
+    const tokens = u.token_count || 0;
+    const tokenPill = tokens > 0
+      ? `<span class="u-pill pill-green">${tokens} token${tokens === 1 ? '' : 's'}</span>`
+      : '';
     const photo = (Array.isArray(u.photos) && u.photos[0]) ? u.photos[0] : null;
     const avatar = photo
       ? `<img class="u-photo" src="${esc(photo)}" alt="">`
@@ -40,7 +47,7 @@ async function loadUsers() {
       <div class="u-meta">
         ${u.name ? `<div class="u-name">${esc(u.name)}</div>` : ''}
         <div class="u-phone">${esc(u.phone_e164)}</div>
-        <div class="u-status">${esc(status)}${archivedTag}</div>
+        <div class="u-status">${stagePill}${tokenPill}${archivedTag}</div>
       </div>
     </li>`;
   }).join('') || '<li class="muted" style="padding:12px 16px">No users yet.</li>';

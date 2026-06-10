@@ -10,6 +10,10 @@ export async function listUsers(includeArchived = false) {
     `SELECT u.id, u.phone_e164, u.created_at, u.completed_at,
             u.name, u.photos, u.archived_at,
             u.current_task_id, u.current_task_user_message_count,
+            u.token_count, u.onboarding_done,
+            u.phone_verified_at, u.email, u.birth_date, u.gender,
+            u.gender_pref, u.partner_age_min, u.neighborhood, u.education,
+            u.has_kids, u.ethnicity, u.religion, u.chosen_amata,
             t.name AS current_task_name
        FROM users u
        LEFT JOIN task_types t ON t.id = u.current_task_id
