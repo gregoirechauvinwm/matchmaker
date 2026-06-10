@@ -13,6 +13,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import 'dotenv/config';
 import { query } from './db/pool.js';
+import { assertEnv, envSummary, APP_ENV } from './lib/env.js';
+
+// Fail fast on misconfiguration BEFORE we start serving. In production a missing
+// live key or webhook secret aborts boot instead of failing deep in a request.
+assertEnv();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -70,12 +75,16 @@ await app.register((await import('./routes/pay.js')).default);
 await app.register((await import('./routes/rate.js')).default);
 await app.register((await import('./routes/webhook.js')).default);
 
-// Health check: confirms the server is up AND can reach the database.
+// Health check: confirms the server is up AND can reach the database. Also
+// reports a SECRET-FREE summary of which environment + database this process is
+// wired to - so when testing you can SEE "I'm hitting staging / db X" instead
+// of guessing (this is what prevents the wrong-environment class of confusion).
 app.get('/health', async () => {
   const result = await query('SELECT now() as time');
   return {
     status: 'ok',
     db_time: result.rows[0].time,
+    env: envSummary(),
   };
 });
 
@@ -87,7 +96,7 @@ const host = process.env.HOST || '0.0.0.0';
 
 try {
   await app.listen({ port, host });
-  console.log(`Server running on ${host}:${port}`);
+  console.log(`Server running on ${host}:${port} [APP_ENV=${APP_ENV}]`);
 } catch (err) {
   app.log.error(err);
   process.exit(1);

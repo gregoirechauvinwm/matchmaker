@@ -5,6 +5,7 @@
   },
   "deploy": {
     "startCommand": "npm start",
+    "preDeployCommand": "ALLOW_PROD_WRITE=1 npm run migrate:all",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 60,
     "numReplicas": 1,

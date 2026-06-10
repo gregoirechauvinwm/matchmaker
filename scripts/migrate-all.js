@@ -23,6 +23,12 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { guardDbTarget } from './_guard.js';
+
+// Refuse to run against a prod-looking DB unless explicitly authorized (--prod
+// or ALLOW_PROD_WRITE=1). The Railway pre-deploy command sets ALLOW_PROD_WRITE=1
+// because deploying TO prod is exactly when prod migrations are intended.
+guardDbTarget({ scriptName: 'migrate:all' });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -54,7 +60,7 @@ const MIGRATIONS = [
 function run(script) {
   return new Promise((resolve, reject) => {
     const path = join(__dirname, script);
-    const child = spawn(process.execPath, [path], { stdio: 'inherit' });
+    const child = spawn(process.execPath, [path], { stdio: 'inherit', env: process.env });
     child.on('exit', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`${script} exited with code ${code}`));

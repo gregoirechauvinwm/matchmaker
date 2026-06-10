@@ -21,6 +21,13 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../src/db/pool.js';
 import { uploadPoolPhoto, r2Configured } from '../src/lib/r2.js';
+import { guardDbTarget } from './_guard.js';
+
+// Saga-killer: this seed once silently wrote to the dev DB for hours. Now it
+// prints its target and refuses a prod-looking DB unless you pass --prod. The
+// canonical prod invocation stays:
+//   DATABASE_URL='<prod-url>' npm run seed:rating-photos -- --prod
+guardDbTarget({ scriptName: 'seed:rating-photos' });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const POOL_DIR = join(__dirname, '..', 'public', 'rate', 'pool');
