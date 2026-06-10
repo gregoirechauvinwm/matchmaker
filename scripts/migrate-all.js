@@ -56,6 +56,7 @@ const MIGRATIONS = [
   'migrate-user-archive.js',
   'migrate-neighborhood.js',
   'migrate-education.js',
+  'migrate-payment-amount.js',
 ];
 
 function run(script) {
