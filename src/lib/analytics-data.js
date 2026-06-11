@@ -54,7 +54,30 @@ export async function getFunnel({ from = null, to = null } = {}) {
     uWhere.params
   )).rows;
   const userIds = users.map((u) => u.id);
-  const totalStarted = users.length;
+
+  // --- top-of-funnel bars from `visits` (anonymous per-browser rows) ---
+  // "Visited" = any visit row (landed on the phone page). "Phone number" =
+  // visit rows that entered a number (deduped per browser). Every verified user
+  // already has a visit row - a live one from their cookie, or a backfilled
+  // 'user:<id>' row - so counting visits directly is both correct and avoids
+  // double-counting (no union needed).
+  const visitWhere = dateClause('first_seen_at', from, to);
+  const visitedCount = (await query(
+    `SELECT COUNT(*)::int AS c FROM visits
+       ${visitWhere.clause ? 'WHERE ' + visitWhere.clause : ''}`,
+    visitWhere.params
+  )).rows[0].c;
+
+  const enteredWhere = dateClause('phone_entered_at', from, to);
+  const phoneCount = (await query(
+    `SELECT COUNT(*)::int AS c FROM visits
+       WHERE phone_e164 IS NOT NULL
+         ${enteredWhere.clause ? 'AND ' + enteredWhere.clause : ''}`,
+    enteredWhere.params
+  )).rows[0].c;
+
+  const visitedBar = { key: 'visited', label: 'Visited', group: 'onboarding', count: visitedCount };
+  const phoneBar = { key: 'phone_number', label: 'Phone number', group: 'onboarding', count: phoneCount };
 
   // --- onboarding bars (grey): count via the shared checkpoint module ---
   const onboardingBars = ONBOARDING_CHECKPOINTS
@@ -105,7 +128,9 @@ export async function getFunnel({ from = null, to = null } = {}) {
   const paidBar = { key: 'paid', label: 'paid', group: 'paid', count: paidCount };
 
   // --- assemble + compute percentages ---
-  const bars = [...onboardingBars, ...taskBars, paidBar];
+  // Order: Visited -> Phone number -> Verif code -> rest of onboarding ->
+  // tasks -> paid. "Visited" is the 100% baseline.
+  const bars = [visitedBar, phoneBar, ...onboardingBars, ...taskBars, paidBar];
   const first = bars.length ? bars[0].count : 0;
   for (let i = 0; i < bars.length; i++) {
     const prev = i === 0 ? bars[i].count : bars[i - 1].count;
@@ -113,7 +138,7 @@ export async function getFunnel({ from = null, to = null } = {}) {
     bars[i].pctOfPrev = prev > 0 ? Math.round((bars[i].count / prev) * 100) : 0;
   }
 
-  return { totalStarted, bars };
+  return { totalStarted: visitedBar.count, bars };
 }
 
 // DAILY REVENUE: sum of amount_cents grouped by paid_at date, within the window.

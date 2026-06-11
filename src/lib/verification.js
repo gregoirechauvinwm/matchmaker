@@ -39,16 +39,26 @@ function verifyServiceSid() {
 }
 
 // Step 1: send a code to this phone (E.164).
+// Returns { sent: true } on success, or { sent: false, reason } if Twilio
+// rejects the number (e.g. unreachable/invalid). We catch rather than throw so
+// the entry flow can show a clean "couldn't send" message instead of a 500 -
+// this is now the real validation point for bad numbers.
 export async function requestCode(phoneE164) {
   if (!isProd) {
     // No real SMS in dev; the user types the bypass code on the next screen.
     return { sent: true, dev: true };
   }
-  const v = await twilioClient()
-    .verify.v2.services(verifyServiceSid())
-    .verifications.create({ to: phoneE164, channel: 'sms' });
-  // Twilio returns status 'pending' when the code has been dispatched.
-  return { sent: v.status === 'pending' };
+  try {
+    const v = await twilioClient()
+      .verify.v2.services(verifyServiceSid())
+      .verifications.create({ to: phoneE164, channel: 'sms' });
+    // Twilio returns status 'pending' when the code has been dispatched.
+    return { sent: v.status === 'pending' };
+  } catch (err) {
+    // Twilio rejects malformed/unreachable numbers (e.g. 60200 invalid
+    // parameter, 60205 SMS not supported). Surface as a clean failure.
+    return { sent: false, reason: 'send_failed', code: err?.code };
+  }
 }
 
 // Step 2: is this code correct for this phone? Returns { verified: boolean }.

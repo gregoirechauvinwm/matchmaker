@@ -418,6 +418,11 @@
   </div>
 
   <script>
+    // Funnel: record an anonymous visit when the onboarding (phone) page loads.
+    // Fire-and-forget; never blocks the UI. The server sets a per-browser cookie
+    // and dedups, so this counts unique browsers that reached the phone step.
+    try { fetch('/auth/visit', { method: 'POST' }); } catch (e) {}
+
     const steps = [...document.querySelectorAll('.step')];
     const bar = document.getElementById('bar');
     const bottomFoot = document.getElementById('bottom-foot');
@@ -505,6 +510,13 @@
         return document.getElementById('b-dd').value.length>=1 && document.getElementById('b-mm').value.length>=1 && document.getElementById('b-yyyy').value.length===4;
       }
       if (type === 'code') return [...s.querySelectorAll('.seg.code')].every(x => x.value.length === 1);
+      if (type === 'input' && focusId === 'f-phone') {
+        // Loosened: just require enough digits to be a plausible number (>=7).
+        // We no longer block on strict "is this a valid number" - the real
+        // validation is whether the SMS code actually arrives on the next step.
+        const digits = document.getElementById('f-phone').value.replace(/\D/g, '');
+        return digits.length >= 7;
+      }
       if (focusId) return document.getElementById(focusId).value.trim().length > 0;
       if (type === 'multi') return !!s.querySelector('.chk.selected');
       if (type === 'agerange' || type === 'intro') return true;
@@ -525,15 +537,11 @@
     function formatError(s) {
       const type = s.dataset.type;
       if (type === 'input' && s.dataset.focus === 'f-phone') {
-        // intl-tel-input validates per selected country (US, FR, etc.).
-        const iti = window._itiPhone;
-        if (iti && typeof iti.isValidNumber === 'function') {
-          if (!iti.isValidNumber()) return 'Enter a valid phone number';
-          return null;
-        }
-        // Fallback if the library hasn't initialized: US 10-digit check.
-        const digits = document.getElementById('f-phone').value.replace(/\D/g,'');
-        if (digits.length !== 10) return 'Enter a valid phone number';
+        // Loosened: only require a plausible digit count (>=7). No strict
+        // per-country validity check - bad numbers are caught when the SMS
+        // fails to arrive, not blocked optimistically here.
+        const digits = document.getElementById('f-phone').value.replace(/\D/g, '');
+        if (digits.length < 7) return 'Enter your phone number';
         return null;
       }
       if (type === 'code') {
@@ -644,7 +652,7 @@
           });
           if (!r.ok) throw new Error();
           window._phone = phone;
-        } catch { showError(s, 'Could not send code. Try again.'); if (btn) btn.disabled = false; return; }
+        } catch { showError(s, 'Could not send a code to that number. Check it and try again.'); if (btn) btn.disabled = false; return; }
         showError(s, ''); i++; show(i); return;
       }
 

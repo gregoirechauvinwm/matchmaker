@@ -10,10 +10,29 @@ import { query } from '../db/pool.js';
 // Turn whatever the user typed into canonical E.164 (e.g. +15551234567),
 // or return null if it isn't a valid number. We store and look up by this
 // canonical form so "+1 (555) 123-4567" and "5551234567" are the same user.
+// Normalize a phone to E.164 (+1XXXXXXXXXX) for sending + as the user key.
+// Loosened (intentionally): we do NOT reject "invalid" numbers here. The real
+// validation is whether the SMS code actually arrives. We still need a stable
+// canonical form, so:
+//   1. If libphonenumber can parse it, use its E.164 (handles formatting,
+//      country codes, the selected country).
+//   2. If not, fall back to '+' + digits, prefixing the US country code (1)
+//      when the digits look like a bare 10-digit US number.
+// Returns null only when there clearly aren't enough digits to be a phone
+// (< 7), which mirrors the front-end's minimum.
 export function normalizePhone(raw, defaultCountry = 'US') {
-  const parsed = parsePhoneNumberFromString(raw, defaultCountry);
-  if (!parsed || !parsed.isValid()) return null;
-  return parsed.number; // E.164 string
+  // Enforce a minimum digit count FIRST (mirrors the front-end's >=7). This
+  // matters because libphonenumber will happily form an E.164 from too few
+  // digits (e.g. '12345' -> '+112345'), which we don't want to accept.
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length < 7) return null;
+
+  const parsed = parsePhoneNumberFromString(raw || '', defaultCountry);
+  if (parsed && parsed.number) return parsed.number; // E.164, even if !isValid()
+
+  // Couldn't parse but we have enough digits: build a plausible E.164.
+  if (defaultCountry === 'US' && digits.length === 10) return '+1' + digits;
+  return '+' + digits;
 }
 
 // Find the user with this phone, or create one if new. Returns the user row.

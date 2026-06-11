@@ -25,7 +25,7 @@
 // `code`, `intro`, and `generating` slider steps have no field of their own and
 // fold into their neighbors; `done` is the terminal checkpoint.
 export const ONBOARDING_CHECKPOINTS = [
-  { key: 'phone',        label: 'Phone',        has: (u) => present(u.phone_verified_at) },
+  { key: 'verif_code',   label: 'Verif code',   has: (u) => present(u.phone_verified_at) },
   { key: 'email',        label: 'Email',        has: (u) => present(u.email) },
   { key: 'birth_date',   label: 'Birth date',   has: (u) => present(u.birth_date) },
   { key: 'name',         label: 'Name',         has: (u) => present(u.name) },

@@ -29,6 +29,7 @@
     "migrate:neighborhood": "node scripts/migrate-neighborhood.js",
     "migrate:education": "node scripts/migrate-education.js",
     "migrate:payment-amount": "node scripts/migrate-payment-amount.js",
+    "migrate:phone-attempts": "node scripts/migrate-phone-attempts.js",
     "seed:rating-photos": "node scripts/seed-rating-photos.js",
     "migrate:all": "node scripts/migrate-all.js"
   },
