@@ -22,7 +22,12 @@ const publicDir = join(__dirname, '..', '..', 'public');
 async function currentUser(request) {
   const userId = getSessionUserId(request);
   if (!userId) return null;
-  return getUserById(userId);
+  const user = await getUserById(userId);
+  if (!user) return null;
+  // First-touch rows are 'anonymous' until phone is verified. Chat is a
+  // post-onboarding surface, so an anonymous session is NOT a chat user.
+  if (user.status && user.status !== 'verified' && !user.phone_verified_at) return null;
+  return user;
 }
 
 export default async function chatRoutes(app) {

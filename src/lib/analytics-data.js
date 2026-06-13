@@ -32,7 +32,7 @@ function dateClause(col, from, to, startIndex = 1) {
 
 // The columns the checkpoint tests read. Keep in sync with onboarding-progress.
 const CHECKPOINT_COLUMNS = `
-  id, phone_verified_at, email, birth_date, name, gender, gender_pref,
+  id, phone_verified_at, phone_entered_at, email, birth_date, name, gender, gender_pref,
   partner_age_min, neighborhood, education, has_kids, ethnicity, religion,
   photos, chosen_amata, onboarding_done
 `;
@@ -55,26 +55,13 @@ export async function getFunnel({ from = null, to = null } = {}) {
   )).rows;
   const userIds = users.map((u) => u.id);
 
-  // --- top-of-funnel bars from `visits` (anonymous per-browser rows) ---
-  // "Visited" = any visit row (landed on the phone page). "Phone number" =
-  // visit rows that entered a number (deduped per browser). Every verified user
-  // already has a visit row - a live one from their cookie, or a backfilled
-  // 'user:<id>' row - so counting visits directly is both correct and avoids
-  // double-counting (no union needed).
-  const visitWhere = dateClause('first_seen_at', from, to);
-  const visitedCount = (await query(
-    `SELECT COUNT(*)::int AS c FROM visits
-       ${visitWhere.clause ? 'WHERE ' + visitWhere.clause : ''}`,
-    visitWhere.params
-  )).rows[0].c;
-
-  const enteredWhere = dateClause('phone_entered_at', from, to);
-  const phoneCount = (await query(
-    `SELECT COUNT(*)::int AS c FROM visits
-       WHERE phone_e164 IS NOT NULL
-         ${enteredWhere.clause ? 'AND ' + enteredWhere.clause : ''}`,
-    enteredWhere.params
-  )).rows[0].c;
+  // --- top-of-funnel bars, now from the users table (one row per person from
+  // first touch). "Visited" = every row in the windowed population (a row
+  // exists = they reached the phone page). "Phone number" = rows that entered a
+  // phone (phone_entered_at set). "Verif code" comes from the checkpoint module
+  // (phone_verified_at). All filtered by created_at via the same windowed set.
+  const visitedCount = users.length;
+  const phoneCount = users.filter((u) => u.phone_entered_at != null).length;
 
   const visitedBar = { key: 'visited', label: 'Visited', group: 'onboarding', count: visitedCount };
   const phoneBar = { key: 'phone_number', label: 'Phone number', group: 'onboarding', count: phoneCount };

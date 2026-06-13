@@ -7,8 +7,8 @@ import { query, pool } from '../db/pool.js';
 // By default hides archived users; pass includeArchived=true to show them.
 export async function listUsers(includeArchived = false) {
   const res = await query(
-    `SELECT u.id, u.phone_e164, u.created_at, u.completed_at,
-            u.name, u.photos, u.archived_at,
+    `SELECT u.id, u.phone_e164, u.phone_entered, u.created_at, u.completed_at,
+            u.name, u.photos, u.archived_at, u.status,
             u.current_task_id, u.current_task_user_message_count,
             u.token_count, u.onboarding_done,
             u.phone_verified_at, u.email, u.birth_date, u.gender,

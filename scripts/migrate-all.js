@@ -58,6 +58,7 @@ const MIGRATIONS = [
   'migrate-education.js',
   'migrate-payment-amount.js',
   'migrate-phone-attempts.js',
+  'migrate-first-touch-identity.js',
 ];
 
 function run(script) {

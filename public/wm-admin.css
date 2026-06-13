@@ -218,3 +218,6 @@ a { color: var(--accent); text-decoration: none; }
 .pf-v { color: #111; text-align: right; }
 .pf-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .pf-photo { width: 72px; height: 96px; border-radius: 8px; object-fit: cover; }
+
+/* Phone display for unverified / phoneless rows (first-touch identity) */
+.u-unverified, .u-nophone { color: #999; font-style: italic; font-size: 11px; }

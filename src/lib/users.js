@@ -49,12 +49,103 @@ export async function findOrCreateUser(phoneE164) {
   }
 
   const created = await query(
-    `INSERT INTO users (phone_e164, phone_verified_at)
-     VALUES ($1, now())
+    `INSERT INTO users (phone_e164, phone_verified_at, status)
+     VALUES ($1, now(), 'verified')
      RETURNING *`,
     [phoneE164]
   );
   return { user: created.rows[0], created: true };
+}
+
+// ---- first-touch identity (Stage 1) -------------------------------------
+
+// Create (or fetch) the anonymous row for a browser, keyed on the anon_id from
+// the mm_visit cookie. Called at first touch (phone-page load) so onboarding
+// fields have a row to attach to BEFORE phone is collected. status='anonymous'
+// until phone is verified. Returns the user row.
+export async function findOrCreateAnonUser(anonId) {
+  const found = await query('SELECT * FROM users WHERE anon_id = $1', [anonId]);
+  if (found.rows.length > 0) return found.rows[0];
+  // NOTE: anon_id has a PARTIAL unique index (WHERE anon_id IS NOT NULL), so the
+  // ON CONFLICT target must include the same predicate to match it - otherwise
+  // Postgres errors with "no unique or exclusion constraint matching the ON
+  // CONFLICT specification".
+  const created = await query(
+    `INSERT INTO users (anon_id, status) VALUES ($1, 'anonymous')
+     ON CONFLICT (anon_id) WHERE anon_id IS NOT NULL
+     DO UPDATE SET anon_id = EXCLUDED.anon_id
+     RETURNING *`,
+    [anonId]
+  );
+  return created.rows[0];
+}
+
+// Columns we copy from an anonymous row into an existing (returning) user when
+// merging. Profile/onboarding fields only - never identity, flow-state, or
+// history columns (those belong to the established row).
+const MERGEABLE_FIELDS = [
+  'name', 'email', 'birth_date', 'gender', 'gender_pref', 'religion',
+  'ethnicity', 'has_kids', 'partner_age_min', 'partner_age_max', 'photos',
+  'chosen_amata', 'neighborhood', 'education', 'phone_entered', 'phone_entered_at',
+];
+
+// Phone verified. Resolve identity, handling the three cases:
+//   (a) phone matches an EXISTING different row (returning user) -> MERGE:
+//       keep the existing row (and all its history/flow state), fill only its
+//       EMPTY mergeable fields from the anon row, delete the anon shell,
+//       return the existing row.
+//   (b) phone is new -> PROMOTE the current anon row: set phone + verified +
+//       status='verified'.
+//   (c) no anon row (cookie lost) -> fall back to findOrCreateUser(phone).
+// `currentUserId` is the session's user id (the anon row), may be null.
+export async function verifyPhoneForUser(currentUserId, phoneE164) {
+  const existing = (await query(
+    'SELECT * FROM users WHERE phone_e164 = $1', [phoneE164]
+  )).rows[0] || null;
+
+  const anon = currentUserId
+    ? (await query('SELECT * FROM users WHERE id = $1', [currentUserId])).rows[0] || null
+    : null;
+
+  // (a) MERGE into an existing returning user.
+  if (existing && (!anon || anon.id !== existing.id)) {
+    if (anon && anon.status === 'anonymous') {
+      // Fill only columns that are empty on the existing row.
+      const sets = [];
+      const vals = [];
+      let n = 1;
+      for (const col of MERGEABLE_FIELDS) {
+        const ev = existing[col];
+        const av = anon[col];
+        const existingEmpty = ev === null || ev === undefined
+          || (Array.isArray(ev) && ev.length === 0) || ev === '';
+        const anonHas = !(av === null || av === undefined
+          || (Array.isArray(av) && av.length === 0) || av === '');
+        if (existingEmpty && anonHas) { sets.push(`${col} = $${n++}`); vals.push(av); }
+      }
+      if (sets.length) {
+        vals.push(existing.id);
+        await query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${n}`, vals);
+      }
+      // Remove the anon shell (it has no child rows - never verified).
+      await query('DELETE FROM users WHERE id = $1', [anon.id]);
+    }
+    const fresh = (await query('SELECT * FROM users WHERE id = $1', [existing.id])).rows[0];
+    return { user: fresh, created: false, merged: true };
+  }
+
+  // (b) PROMOTE the current anon row to a verified user with this phone.
+  if (anon) {
+    const updated = (await query(
+      `UPDATE users SET phone_e164 = $1, phone_verified_at = now(), status = 'verified'
+         WHERE id = $2 RETURNING *`,
+      [phoneE164, anon.id]
+    )).rows[0];
+    return { user: updated, created: true, merged: false };
+  }
+
+  // (c) No anon row at all (cookie lost / direct hit): normal find-or-create.
+  return await findOrCreateUser(phoneE164);
 }
 
 export async function getUserById(id) {

@@ -23,7 +23,12 @@ const ORDER = { detection: 0, evaluation: 1, whisperer: 2, speaker: 3 };
 
 async function loadUsers() {
   const showArchived = !!document.getElementById('show-archived')?.checked;
-  const res = await fetch('/wm-admin/api/users' + (showArchived ? '?archived=1' : ''));
+  const status = document.getElementById('status-filter')?.value || 'all';
+  const params = new URLSearchParams();
+  if (showArchived) params.set('archived', '1');
+  if (status && status !== 'all') params.set('status', status);
+  const qs = params.toString();
+  const res = await fetch('/wm-admin/api/users' + (qs ? '?' + qs : ''));
   if (res.status === 401 || res.redirected) { location.href = '/wm-admin/login'; return; }
   const { users } = await res.json();
   const sel = selectedUserId();
@@ -46,7 +51,9 @@ async function loadUsers() {
       ${avatar}
       <div class="u-meta">
         ${u.name ? `<div class="u-name">${esc(u.name)}</div>` : ''}
-        <div class="u-phone">${esc(u.phone_e164)}</div>
+        <div class="u-phone">${u.phone_e164
+          ? esc(u.phone_e164)
+          : (u.phone_entered ? esc(u.phone_entered) + ' <span class="u-unverified">(unverified)</span>' : '<span class="u-nophone">no phone</span>')}</div>
         <div class="u-status">${stagePill}${tokenPill}${archivedTag}</div>
       </div>
     </li>`;
@@ -64,6 +71,7 @@ async function loadUsers() {
 
 // Re-load the list when the archived toggle changes.
 document.getElementById('show-archived')?.addEventListener('change', loadUsers);
+document.getElementById('status-filter')?.addEventListener('change', loadUsers);
 
 let resultCache = {}; // key -> result object, for the completion panel
 
@@ -77,7 +85,9 @@ function profileCard(u) {
   return `<div class="profile-card">
     <div class="pf-head">${amata}<div>
       ${u.name ? `<div class="pf-name">${esc(u.name)}</div>` : ''}
-      <div class="pf-phone">${esc(u.phone_e164)}</div>
+      <div class="pf-phone">${u.phone_e164
+        ? esc(u.phone_e164)
+        : (u.phone_entered ? esc(u.phone_entered) + ' (unverified)' : 'no phone')}</div>
     </div></div>
     <div class="pf-grid">
       ${row('Age', u.age)}
@@ -137,7 +147,8 @@ async function loadConversation(userId) {
   const res = await fetch(`/wm-admin/api/conversation/${userId}`);
   if (!res.ok) { convoEl.innerHTML = '<div class="muted" style="padding:16px">Not found.</div>'; return; }
   const { user, turns } = await res.json();
-  convoHead.textContent = (user.name ? user.name + ' · ' : '') + user.phone_e164 + (user.completed_at ? ' · completed' : '');
+  const headPhone = user.phone_e164 || user.phone_entered || 'no phone';
+  convoHead.textContent = (user.name ? user.name + ' · ' : '') + headPhone + (user.completed_at ? ' · completed' : '');
 
   resultCache = {};
   const blocks = [];

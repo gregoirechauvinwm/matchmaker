@@ -37,6 +37,7 @@ function formatProfile(u) {
   return {
     id: u.id,
     phone_e164: u.phone_e164,
+    phone_entered: u.phone_entered || null,
     completed_at: u.completed_at,
     name: u.name || '',
     email: u.email || '',
@@ -116,33 +117,45 @@ export default async function adminRoutes(app) {
   // --- users list (JSON) ---------------------------------------------------
   app.get(`${BASE}/api/users`, async (request, reply) => {
     const includeArchived = request.query?.archived === '1' || request.query?.archived === 'true';
+    // Optional status filter: 'verified' | 'anonymous' | 'all' (default 'all').
+    // Anonymous = first-touch rows that haven't verified a phone yet.
+    const statusFilter = request.query?.status || 'all';
     const rows = await listUsers(includeArchived);
     // Compute the display "stage" server-side so the checkpoint logic stays in
     // one place (onboarding-progress.js) and the browser just renders strings.
     //   - still onboarding  -> { kind:'onboarding', label:<furthest checkpoint> }
     //   - signed up, in task -> { kind:'task', label:<task name> }
     //   - finished the flow  -> { kind:'completed', label:'completed' }
-    const users = rows.map((u) => {
-      let stage;
-      if (u.onboarding_done) {
-        stage = u.completed_at
-          ? { kind: 'completed', label: 'completed' }
-          : { kind: 'task', label: u.current_task_name || 'started' };
-      } else {
-        const cp = furthestCheckpoint(u);
-        stage = { kind: 'onboarding', label: cp ? cp.label : 'not started' };
-      }
-      // Return only what the list needs - not the raw profile columns.
-      return {
-        id: u.id,
-        phone_e164: u.phone_e164,
-        name: u.name,
-        photos: u.photos,
-        archived_at: u.archived_at,
-        token_count: u.token_count || 0,
-        stage,
-      };
-    });
+    const users = rows
+      .filter((u) => {
+        if (statusFilter === 'all') return true;
+        const s = u.status || (u.phone_verified_at ? 'verified' : 'anonymous');
+        return s === statusFilter;
+      })
+      .map((u) => {
+        let stage;
+        if (u.onboarding_done) {
+          stage = u.completed_at
+            ? { kind: 'completed', label: 'completed' }
+            : { kind: 'task', label: u.current_task_name || 'started' };
+        } else {
+          const cp = furthestCheckpoint(u);
+          stage = { kind: 'onboarding', label: cp ? cp.label : 'not started' };
+        }
+        return {
+          id: u.id,
+          phone_e164: u.phone_e164,
+          // The number they typed, even if unverified. Lets the list show a
+          // phone for users who entered one but dropped before verifying.
+          phone_entered: u.phone_entered || null,
+          name: u.name,
+          photos: u.photos,
+          archived_at: u.archived_at,
+          status: u.status || (u.phone_verified_at ? 'verified' : 'anonymous'),
+          token_count: u.token_count || 0,
+          stage,
+        };
+      });
     return { users };
   });
 

@@ -6,15 +6,14 @@
 //   GET  /auth/me             -> who am I? (used by the frontend to route)
 
 import { requestCode, confirmCode } from '../lib/verification.js';
-import { normalizePhone, findOrCreateUser, getUserById } from '../lib/users.js';
+import { normalizePhone, findOrCreateUser, findOrCreateAnonUser, verifyPhoneForUser, getUserById } from '../lib/users.js';
 import { setSession, clearSession, getSessionUserId } from '../lib/session.js';
 import { query } from '../db/pool.js';
 import { randomUUID } from 'node:crypto';
 
-// Anonymous per-browser id used for funnel top-of-funnel tracking (Visited ->
-// Phone number -> Verif code). Not tied to any PII; just lets us dedup a single
-// browser so one person trying two numbers counts once, and lets us count
-// visits to the phone page. Persistent (~1 year).
+// Anonymous per-browser id. Set on first touch (phone-page load). It now backs
+// a real (anonymous-status) user row so onboarding fields can be saved BEFORE
+// phone is collected and phone can sit anywhere in the flow.
 const VISIT_COOKIE = 'mm_visit';
 const visitCookieOptions = {
   httpOnly: false, sameSite: 'lax', path: '/', secure: false, signed: false,
@@ -27,8 +26,9 @@ function getVisitId(request) {
 }
 
 export default async function authRoutes(app) {
-  // Called when the phone page loads. Establishes (once) an anonymous visit id
-  // and records the visit. Idempotent per browser via the cookie + ON CONFLICT.
+  // First touch (phone page load): ensure an anonymous user row exists for this
+  // browser and the session points at it, so subsequent /onboarding/save calls
+  // have a row to write to even before phone verification.
   app.post('/auth/visit', async (request, reply) => {
     let visitId = getVisitId(request);
     if (!visitId) {
@@ -36,14 +36,18 @@ export default async function authRoutes(app) {
       reply.setCookie(VISIT_COOKIE, visitId, visitCookieOptions);
     }
     try {
-      await query(
-        `INSERT INTO visits (visit_id) VALUES ($1) ON CONFLICT (visit_id) DO NOTHING`,
-        [visitId]
-      );
+      const user = await findOrCreateAnonUser(visitId);
+      // Only set the session if not already logged in as someone real, so we
+      // never downgrade a verified session back to the anon row.
+      const current = getSessionUserId(request);
+      if (!current) setSession(reply, user.id);
+      return { ok: true };
     } catch (err) {
-      request.log.warn({ err: err.message }, 'visit log failed');
+      // Don't block the page load, but make a real failure visible (this is
+      // how an earlier ON CONFLICT/index mismatch stayed hidden behind a 200).
+      request.log.error({ err: err.message }, 'visit/anon-user insert failed');
+      return { ok: true };
     }
-    return { ok: true };
   });
 
   // Ask for a verification code to be sent to a phone number.
@@ -53,25 +57,24 @@ export default async function authRoutes(app) {
     if (!phoneE164) {
       return reply.code(400).send({ error: 'invalid_phone' });
     }
-    // Record the entered number against this browser's visit row (dedup per
-    // browser, not per number). If somehow there's no visit cookie yet, create
-    // one now so the entry is still counted. Never blocks the user.
+    // Record the entered number on this browser's row so the funnel's "Phone
+    // number" step counts it even before verification, AND so the back-office
+    // can show what they typed. We store it in phone_entered (NOT phone_e164,
+    // which stays reserved for the verified identity). phone_verified_at stays
+    // null until the code is confirmed. Never blocks the user.
     try {
-      let visitId = getVisitId(request);
-      if (!visitId) {
-        visitId = randomUUID();
-        reply.setCookie(VISIT_COOKIE, visitId, visitCookieOptions);
+      const uid = getSessionUserId(request);
+      if (uid) {
+        await query(
+          `UPDATE users
+              SET phone_entered = $2,
+                  phone_entered_at = COALESCE(phone_entered_at, now())
+            WHERE id = $1`,
+          [uid, phoneE164]
+        );
       }
-      await query(
-        `INSERT INTO visits (visit_id, phone_e164, phone_entered_at)
-              VALUES ($1, $2, now())
-         ON CONFLICT (visit_id)
-         DO UPDATE SET phone_e164 = EXCLUDED.phone_e164,
-                       phone_entered_at = COALESCE(visits.phone_entered_at, EXCLUDED.phone_entered_at)`,
-        [visitId, phoneE164]
-      );
     } catch (err) {
-      request.log.warn({ err: err.message }, 'visit phone log failed');
+      request.log.warn({ err: err.message }, 'phone-entered log failed');
     }
     const result = await requestCode(phoneE164);
     if (result && result.sent === false) {
@@ -99,7 +102,10 @@ export default async function authRoutes(app) {
       return reply.code(401).send({ error: 'bad_code' });
     }
 
-    const { user, created } = await findOrCreateUser(phoneE164);
+    // Resolve identity against the current (anon) session row: merge into an
+    // existing returning user, or promote this anon row to verified.
+    const currentUserId = getSessionUserId(request);
+    const { user, created } = await verifyPhoneForUser(currentUserId, phoneE164);
     setSession(reply, user.id);
     return { ok: true, created };
   });
@@ -116,8 +122,13 @@ export default async function authRoutes(app) {
     if (!userId) return { authenticated: false };
     const user = await getUserById(userId);
     if (!user) return { authenticated: false };
+    // 'verified' means phone-confirmed; 'anonymous' is a first-touch row that
+    // hasn't verified yet. Downstream routing should treat anonymous as
+    // "not really logged in" for anything gated on a real account.
+    const verified = user.status === 'verified' || !!user.phone_verified_at;
     return {
-      authenticated: true,
+      authenticated: verified,
+      status: user.status || (verified ? 'verified' : 'anonymous'),
       user_id: user.id,
       name: user.name || null,
       chosen_amata: user.chosen_amata || null,
