@@ -15,7 +15,8 @@
 // logic unduplicated.
 
 import { query } from '../db/pool.js';
-import { ONBOARDING_CHECKPOINTS, reachedCheckpoint } from './onboarding-progress.js';
+import { ONBOARDING_CHECKPOINTS } from './onboarding-progress.js';
+import { FUNNEL_VERSIONS, CORE_MILESTONES, activeVersion, getVersion } from './funnel-versions.js';
 
 // Build a parameterized "[col] BETWEEN ..." clause from optional from/to ISO
 // date strings (YYYY-MM-DD). `to` is treated as inclusive of that whole day.
@@ -32,7 +33,7 @@ function dateClause(col, from, to, startIndex = 1) {
 
 // The columns the checkpoint tests read. Keep in sync with onboarding-progress.
 const CHECKPOINT_COLUMNS = `
-  id, phone_verified_at, phone_entered_at, email, birth_date, name, gender, gender_pref,
+  id, phone_verified_at, phone_entered_at, applied_at, email, birth_date, name, gender, gender_pref,
   partner_age_min, neighborhood, education, has_kids, ethnicity, religion,
   photos, chosen_amata, onboarding_done
 `;
@@ -40,84 +41,88 @@ const CHECKPOINT_COLUMNS = `
 // FUNNEL: ordered bars with reached-counts, step-to-step %, and total % from
 // the first bar. Shape per bar: { key, label, group:'onboarding'|'task'|'paid',
 // count, pctOfFirst, pctOfPrev }.
-export async function getFunnel({ from = null, to = null } = {}) {
+//
+// `version` selects which funnel to render:
+//   - a version id (e.g. 'v1')  -> that version's exact step list/order, counted
+//     over ONLY users stamped with that version (the faithful per-version view).
+//   - 'core'                    -> the CORE_MILESTONES list, counted over ALL
+//     users regardless of version (the cross-version KPI view).
+//   - omitted/null              -> the active version.
+export async function getFunnel({ from = null, to = null, version = null } = {}) {
+  const isCore = version === 'core';
+  const ver = isCore ? null : (getVersion(version) || activeVersion());
+
   // --- denominator population: NON-ARCHIVED users created in the window ---
-  // Archived users are excluded from all analytics. Because the task-bar and
-  // paid-bar counts below are derived from THIS set of user ids, excluding
-  // archived users here removes them from every bar in one place.
+  // For a per-version funnel, restrict to users stamped with that version. For
+  // the cross-version 'core' view, include all (non-archived, windowed) users.
   const uWhere = dateClause('created_at', from, to);
   const conds = ['archived_at IS NULL'];
+  const params = [...uWhere.params];
   if (uWhere.clause) conds.push(uWhere.clause);
+  if (!isCore && ver) { conds.push(`funnel_version = $${params.length + 1}`); params.push(ver.id); }
   const users = (await query(
-    `SELECT ${CHECKPOINT_COLUMNS} FROM users
-      WHERE ${conds.join(' AND ')}`,
-    uWhere.params
+    `SELECT ${CHECKPOINT_COLUMNS}, funnel_version FROM users WHERE ${conds.join(' AND ')}`,
+    params
   )).rows;
   const userIds = users.map((u) => u.id);
 
-  // --- top-of-funnel bars, now from the users table (one row per person from
-  // first touch). "Visited" = every row in the windowed population (a row
-  // exists = they reached the phone page). "Phone number" = rows that entered a
-  // phone (phone_entered_at set). "Verif code" comes from the checkpoint module
-  // (phone_verified_at). All filtered by created_at via the same windowed set.
-  const visitedCount = users.length;
-  const phoneCount = users.filter((u) => u.phone_entered_at != null).length;
+  // --- compute the COUNT for any step key over this user population ---
+  // Top-of-funnel + onboarding checkpoints are field-presence (version-
+  // independent facts). 'tasks' and 'paid' need SQL over the windowed ids.
+  const checkpointByKey = new Map(ONBOARDING_CHECKPOINTS.map((cp) => [cp.key, cp]));
 
-  const visitedBar = { key: 'visited', label: 'Visited', group: 'onboarding', count: visitedCount };
-  const phoneBar = { key: 'phone_number', label: 'Phone number', group: 'onboarding', count: phoneCount };
-
-  // --- onboarding bars (grey): count via the shared checkpoint module ---
-  const onboardingBars = ONBOARDING_CHECKPOINTS
-    .filter((cp) => cp.key !== 'done') // 'done' is represented by reaching the first task
-    .map((cp) => ({
-      key: cp.key,
-      label: cp.label,
-      group: 'onboarding',
-      count: users.filter((u) => reachedCheckpoint(u, cp.key)).length,
-    }));
-
-  // --- task bars (blue): active task_types in order; reached = has a tasks row ---
+  // task instances per user (for 'tasks' expansion)
   const taskTypes = (await query(
     `SELECT id, name FROM task_types WHERE is_active = true ORDER BY position ASC`
   )).rows;
-
-  let taskBars = [];
+  let taskCountByType = new Map();
   if (taskTypes.length && userIds.length) {
-    // Count, per task_type, how many of OUR windowed users have an instance.
     const counts = (await query(
       `SELECT task_type_id, COUNT(DISTINCT user_id)::int AS c
-         FROM tasks
-        WHERE user_id = ANY($1::uuid[])
-        GROUP BY task_type_id`,
+         FROM tasks WHERE user_id = ANY($1::uuid[]) GROUP BY task_type_id`,
       [userIds]
     )).rows;
-    const byType = new Map(counts.map((r) => [r.task_type_id, r.c]));
-    taskBars = taskTypes.map((tt) => ({
-      key: 'task:' + tt.id,
-      label: tt.name,
-      group: 'task',
-      count: byType.get(tt.id) || 0,
-    }));
-  } else {
-    taskBars = taskTypes.map((tt) => ({ key: 'task:' + tt.id, label: tt.name, group: 'task', count: 0 }));
+    taskCountByType = new Map(counts.map((r) => [r.task_type_id, r.c]));
   }
 
-  // --- paid bar (green): windowed users who have a paid payment_link ---
   let paidCount = 0;
   if (userIds.length) {
     paidCount = (await query(
       `SELECT COUNT(DISTINCT user_id)::int AS c
-         FROM payment_links
-        WHERE paid_at IS NOT NULL AND user_id = ANY($1::uuid[])`,
+         FROM payment_links WHERE paid_at IS NOT NULL AND user_id = ANY($1::uuid[])`,
       [userIds]
     )).rows[0].c;
   }
-  const paidBar = { key: 'paid', label: 'paid', group: 'paid', count: paidCount };
 
-  // --- assemble + compute percentages ---
-  // Order: Visited -> Phone number -> Verif code -> rest of onboarding ->
-  // tasks -> paid. "Visited" is the 100% baseline.
-  const bars = [visitedBar, phoneBar, ...onboardingBars, ...taskBars, paidBar];
+  // Expand a step key into one or more concrete bars with counts.
+  // Onboarding sign-up steps get an " ok" suffix on their label (a convention
+  // requested for the dashboard) - EXCEPT 'visited'. Tasks and paid keep their
+  // own names untouched.
+  function barsForKey(key) {
+    if (key === 'visited') return [{ key, label: 'Visited', group: 'onboarding', count: users.length }];
+    if (key === 'applied') return [{ key, label: 'Applied ok', group: 'onboarding', count: users.filter((u) => u.applied_at != null).length }];
+    if (key === 'phone_number') return [{ key, label: 'Phone number ok', group: 'onboarding', count: users.filter((u) => u.phone_entered_at != null).length }];
+    if (key === 'paid') return [{ key, label: 'paid', group: 'paid', count: paidCount }];
+    if (key === 'tasks') {
+      return taskTypes.map((tt) => ({ key: 'task:' + tt.id, label: tt.name, group: 'task', count: taskCountByType.get(tt.id) || 0 }));
+    }
+    const cp = checkpointByKey.get(key);
+    if (cp && key !== 'done') {
+      // Count DIRECT presence of this step's own field (cp.has), not the
+      // cumulative "reached this or any later checkpoint" - the cumulative
+      // version assumes v1's step order and produces wrong counts once a version
+      // reorders steps (e.g. birth_date filled would wrongly light up verif_code
+      // because verif_code scans forward and finds birth_date set).
+      return [{ key, label: cp.label + ' ok', group: 'onboarding', count: users.filter((u) => cp.has(u)).length }];
+    }
+    return []; // unknown key -> skip
+  }
+
+  // Assemble bars in the requested order (per-version step list, or milestones).
+  const stepKeys = isCore ? CORE_MILESTONES : ver.steps;
+  const bars = stepKeys.flatMap(barsForKey);
+
+  // percentages
   const first = bars.length ? bars[0].count : 0;
   for (let i = 0; i < bars.length; i++) {
     const prev = i === 0 ? bars[i].count : bars[i - 1].count;
@@ -125,7 +130,19 @@ export async function getFunnel({ from = null, to = null } = {}) {
     bars[i].pctOfPrev = prev > 0 ? Math.round((bars[i].count / prev) * 100) : 0;
   }
 
-  return { totalStarted: visitedBar.count, bars };
+  return {
+    totalStarted: bars.length ? bars[0].count : 0,
+    bars,
+    version: isCore ? 'core' : ver.id,
+    isCore,
+  };
+}
+
+// List available funnel versions (for the dashboard tabs), newest first, plus
+// the cross-version 'core' view. Returns [{ id, label, active }].
+export function getFunnelVersions() {
+  const versions = [...FUNNEL_VERSIONS].reverse().map((v) => ({ id: v.id, label: v.label, active: !!v.active }));
+  return [{ id: 'core', label: 'All versions (milestones)', active: false }, ...versions];
 }
 
 // DAILY REVENUE: sum of amount_cents grouped by paid_at date, within the window.

@@ -13,6 +13,11 @@
     .an-main { min-width: 0; overflow: auto; padding: 28px 32px; }
     .an-section { margin-bottom: 48px; }
     .an-head { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; max-width: 1100px; }
+    .an-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+    .an-tab { font-size: 13px; padding: 6px 12px; border: 1px solid #d4d4d4; border-radius: 999px;
+      background: #fff; color: #444; cursor: pointer; }
+    .an-tab.active { background: #111; color: #fff; border-color: #111; }
+    .an-tab.core { font-style: italic; }
     .an-title { font-size: 18px; font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
     .an-range { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #444; }
     .an-range select, .an-range input[type=date] {
@@ -76,6 +81,7 @@
           </div>
           <span class="an-total" id="funnel-total"></span>
         </div>
+        <div class="an-tabs" id="funnel-tabs"></div>
         <div class="an-chart" id="funnel-chart"><div class="an-loading">Loading…</div></div>
       </section>
 
@@ -142,6 +148,33 @@
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
     // ===== FUNNEL CHART (hand-rolled SVG) =====
+    let selectedVersion = null; // null = active version (server decides)
+
+    async function loadFunnelTabs(){
+      const tabsEl = document.getElementById('funnel-tabs');
+      let versions = [];
+      try {
+        const res = await fetch('/wm-admin/api/analytics/funnel-versions');
+        if (res.status === 401 || res.redirected) { location.href = '/wm-admin/login'; return; }
+        versions = (await res.json()).versions || [];
+      } catch { return; }
+      // Default selection: the active version (else the first non-core tab).
+      if (selectedVersion == null) {
+        const act = versions.find(v => v.active);
+        selectedVersion = act ? act.id : (versions.find(v => v.id !== 'core')?.id || 'core');
+      }
+      tabsEl.innerHTML = versions.map(v =>
+        `<button class="an-tab ${v.id === 'core' ? 'core' : ''} ${v.id === selectedVersion ? 'active' : ''}" data-version="${v.id}">${esc(v.label)}</button>`
+      ).join('');
+      tabsEl.querySelectorAll('.an-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedVersion = btn.dataset.version;
+          tabsEl.querySelectorAll('.an-tab').forEach(b => b.classList.toggle('active', b === btn));
+          loadFunnel();
+        });
+      });
+    }
+
     async function loadFunnel(){
       const el = document.getElementById('funnel-range');
       const range = resolveRange(el);
@@ -149,13 +182,16 @@
       chart.innerHTML = '<div class="an-loading">Loading…</div>';
       let data;
       try {
-        const res = await fetch('/wm-admin/api/analytics/funnel' + qs(range));
+        let q = qs(range);
+        if (selectedVersion) q += (q ? '&' : '?') + 'version=' + encodeURIComponent(selectedVersion);
+        const res = await fetch('/wm-admin/api/analytics/funnel' + q);
         if (res.status === 401 || res.redirected) { location.href = '/wm-admin/login'; return; }
         data = await res.json();
       } catch { chart.innerHTML = '<div class="an-empty">Failed to load.</div>'; return; }
 
+      const startedLabel = data.isCore ? ' reached' : ' started';
       document.getElementById('funnel-total').textContent =
-        data.totalStarted ? (data.totalStarted + ' started') : '';
+        data.totalStarted ? (data.totalStarted + startedLabel) : '';
       const bars = data.bars || [];
       if (!bars.length || !data.totalStarted){
         chart.innerHTML = '<div class="an-empty">No users in this range.</div>';
@@ -253,7 +289,7 @@
     // init
     wireRange(document.getElementById('funnel-range'), loadFunnel);
     wireRange(document.getElementById('revenue-range'), loadRevenue);
-    loadFunnel();
+    loadFunnelTabs().then(loadFunnel);
     loadRevenue();
   </script>
 </body>

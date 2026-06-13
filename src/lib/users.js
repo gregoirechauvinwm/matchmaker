@@ -6,6 +6,7 @@
 
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { query } from '../db/pool.js';
+import { activeVersion } from './funnel-versions.js';
 
 // Turn whatever the user typed into canonical E.164 (e.g. +15551234567),
 // or return null if it isn't a valid number. We store and look up by this
@@ -66,16 +67,19 @@ export async function findOrCreateUser(phoneE164) {
 export async function findOrCreateAnonUser(anonId) {
   const found = await query('SELECT * FROM users WHERE anon_id = $1', [anonId]);
   if (found.rows.length > 0) return found.rows[0];
+  // Stamp the funnel version active at first touch (never changes afterward),
+  // so per-version analytics can attribute this user to the flow they saw.
+  const version = activeVersion().id;
   // NOTE: anon_id has a PARTIAL unique index (WHERE anon_id IS NOT NULL), so the
   // ON CONFLICT target must include the same predicate to match it - otherwise
   // Postgres errors with "no unique or exclusion constraint matching the ON
   // CONFLICT specification".
   const created = await query(
-    `INSERT INTO users (anon_id, status) VALUES ($1, 'anonymous')
+    `INSERT INTO users (anon_id, status, funnel_version) VALUES ($1, 'anonymous', $2)
      ON CONFLICT (anon_id) WHERE anon_id IS NOT NULL
      DO UPDATE SET anon_id = EXCLUDED.anon_id
      RETURNING *`,
-    [anonId]
+    [anonId, version]
   );
   return created.rows[0];
 }

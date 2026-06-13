@@ -11,7 +11,7 @@ import {
 } from '../lib/admin-auth.js';
 import { listUsers, getUserBasic, getConversation, archiveUser, unarchiveUser, deleteUser } from '../lib/admin-data.js';
 import { furthestCheckpoint } from '../lib/onboarding-progress.js';
-import { getFunnel, getDailyRevenue } from '../lib/analytics-data.js';
+import { getFunnel, getFunnelVersions, getDailyRevenue } from '../lib/analytics-data.js';
 import { getDraft } from '../lib/editor-data.js';
 import {
   getPublished, listVersions, reloadVersion, saveAndPublish,
@@ -202,8 +202,11 @@ export default async function adminRoutes(app) {
   });
   // Both accept optional ?from=YYYY-MM-DD&to=YYYY-MM-DD (all-time if omitted).
   app.get(`${BASE}/api/analytics/funnel`, async (request) => {
-    const { from, to } = request.query || {};
-    return getFunnel({ from: from || null, to: to || null });
+    const { from, to, version } = request.query || {};
+    return getFunnel({ from: from || null, to: to || null, version: version || null });
+  });
+  app.get(`${BASE}/api/analytics/funnel-versions`, async () => {
+    return { versions: getFunnelVersions() };
   });
   app.get(`${BASE}/api/analytics/revenue`, async (request) => {
     const { from, to } = request.query || {};

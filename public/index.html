@@ -122,6 +122,47 @@
     .btn:disabled { background: #EFEFF0; color: rgba(60,60,67,0.3); cursor: default; }
     .btn-secondary { background: #DFDFDF; color: #000; }
 
+    /* ===== Welcome / landing step (logged-out entry) ===== */
+    .welcome-step {
+      padding: 0;                 /* full-bleed; override the standard .step padding */
+      overflow: hidden;
+      background: #fff;
+    }
+    /* Torn paper from the paywall, flipped vertically + pinned to the TOP. */
+    .welcome-torn {
+      position: absolute; top: 0; left: 0; right: 0;
+      width: 100%; height: auto;
+      transform: scale(-1, -1); z-index: 1; pointer-events: none; display: block;
+    }
+    .welcome-logo {
+      position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+      width: 96px; height: auto; z-index: 2;
+    }
+    .welcome-close {
+      position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 18px;
+      font-size: 28px; line-height: 1; background: none; border: none; color: #000;
+      cursor: pointer; padding: 4px; z-index: 3;
+    }
+    /* Centered title block, vertically centered in the screen. */
+    .welcome-center {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 0 24px; z-index: 2;
+    }
+    .welcome-title {
+      margin: 0; font-family: var(--cp); font-weight: 400; font-size: 32px;
+      letter-spacing: -0.04em; color: #000; line-height: 1.15;
+    }
+    .welcome-brand { font-weight: 700; font-size: 35px; letter-spacing: -0.04em; }
+    /* Buttons + footer pinned near the bottom. */
+    .welcome-actions {
+      position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom));
+      padding: 0 24px; display: flex; flex-direction: column; gap: 12px; z-index: 2;
+    }
+    .welcome-foot {
+      margin: 6px 0 0; font-family: var(--cp); font-weight: 400; font-size: 16px;
+      text-align: center; color: #000;
+    }
+
     /* segmented inputs (birth, code) */
     .segments { display: flex; gap: 12px; }
     .seg { text-align: center; }
@@ -187,6 +228,153 @@
     </div>
 
     <div class="shell" id="shell">
+      <!-- 0 welcome / landing (default for logged-out users) -->
+      <section class="step welcome-step" data-type="welcome">
+        <img class="welcome-torn" src="/pay/torn-edge.png" alt="" />
+        <img class="welcome-logo" src="/logo.png" alt="amata" />
+        <button class="welcome-close" id="welcome-close" aria-label="Close">&times;</button>
+        <div class="welcome-center">
+          <p class="welcome-title">Let's set you up<br>on your<br><span class="welcome-brand">Blind Tuesdate</span></p>
+        </div>
+        <div class="welcome-actions">
+          <button class="btn" id="welcome-apply">Apply now</button>
+        </div>
+      </section>
+
+      <!-- 4 birth date (dd mm yyyy, auto-advance) -->
+      <section class="step" data-type="birth">
+        <div class="title-block"><p class="title">What's your birth date?</p></div>
+        <div class="segments">
+          <input class="field seg" id="b-mm" inputmode="numeric" maxlength="2" placeholder="mm">
+          <input class="field seg" id="b-dd" inputmode="numeric" maxlength="2" placeholder="dd">
+          <input class="field seg" id="b-yyyy" inputmode="numeric" maxlength="4" placeholder="yyyy">
+        </div>
+        <p class="field-error" id="err-birth"></p>
+        <p class="err" id="err-birth"></p>
+        <div class="input-foot"><button class="btn step-next" disabled>Continue</button></div>
+      </section>
+      <!-- 6 identify -->
+      <section class="step" data-type="single">
+        <div class="title-block"><p class="title">How do you identify?</p></div>
+        <div class="opts" data-single>
+          <button class="opt">I am a woman</button>
+          <button class="opt">I am a man</button>
+          <button class="opt">I am non-binary</button>
+        </div>
+      </section>
+      <!-- 7 who to meet -->
+      <section class="step" data-type="multi">
+        <div class="title-block"><p class="title">Who do you want<br>to meet?</p></div>
+        <div class="opts" data-multi>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Women</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Men</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Non-binaries</div>
+        </div>
+      </section>
+      <!-- 8 their age -->
+      <section class="step" data-type="agerange">
+        <div class="title-block">
+          <p class="title">How old should<br>they be?</p>
+          <p class="para">Select the ideal age range for your partner. We ask for a minimum 5-year range.</p>
+        </div>
+        <p class="range-label">Between <span id="age-lo">25</span> and <span id="age-hi">45</span></p>
+        <div class="dual" id="dual">
+          <div class="dual-track"></div>
+          <div class="dual-fill" id="dual-fill"></div>
+          <input type="range" id="age-min" min="18" max="75" value="25" />
+          <input type="range" id="age-max" min="18" max="75" value="45" />
+        </div>
+      </section>
+      <!-- 8b where do you live -->
+      <section class="step" data-type="single">
+        <div class="title-block"><p class="title">Where do you live?</p></div>
+        <div class="opts" data-single>
+          <button class="opt">Lower Manhattan</button>
+          <button class="opt">Midtown Manhattan</button>
+          <button class="opt">Upper Manhattan</button>
+          <button class="opt">Brooklyn</button>
+          <button class="opt">Queens</button>
+          <button class="opt">Bronx</button>
+          <button class="opt">New Jersey</button>
+          <button class="opt">Long Island</button>
+          <button class="opt">Staten Island</button>
+          <button class="opt">I don't live near NYC</button>
+        </div>
+      </section>
+      <!-- 9 education -->
+      <section class="step" data-type="single">
+        <div class="title-block"><p class="title">What is your<br>education level?</p></div>
+        <div class="opts" data-single>
+          <button class="opt">High school / Secondary school</button>
+          <button class="opt">Undergrad</button>
+          <button class="opt">Postgrad</button>
+          <button class="opt">Prefer not to say</button>
+        </div>
+      </section>
+      <!-- 10 children -->
+      <section class="step" data-type="single">
+        <div class="title-block"><p class="title">Do you have<br>children already?</p></div>
+        <div class="opts" data-single>
+          <button class="opt">Don't have children</button>
+          <button class="opt">Have children</button>
+        </div>
+      </section>
+      <!-- 11 ethnicity -->
+      <section class="step" data-type="multi">
+        <div class="title-block"><p class="title">What's your ethnicity?</p></div>
+        <div class="opts" data-multi>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Black/African Descent</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Caucasian/White</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>East Asian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Hispanic/Latino</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Middle Eastern</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Native American</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Pacific Islander</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>South Asian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Southeast Asian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Indian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Other</div>
+        </div>
+      </section>
+      <!-- 12 religion -->
+      <section class="step" data-type="multi">
+        <div class="title-block"><p class="title">What are your<br>religious beliefs?</p></div>
+        <div class="opts" data-multi>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Agnostic</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Atheist</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Buddhist</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Catholic</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Christian</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Hindu</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Jewish</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Muslim</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Sikh</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Spiritual</div>
+          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Other</div>
+        </div>
+      </section>
+      <!-- 13 photos -->
+      <section class="step" data-type="photos">
+        <div class="title-block">
+          <p class="title" id="photo-title">Add at least<br>2 photos of you</p>
+          <p class="para" id="photo-sub">Pictures of our members help us understand their preferences and verify their identity. They will never be shown to your matches before a blind date.</p>
+        </div>
+        <div class="photo-grid two" id="photo-grid"></div>
+      </section>
+      <!-- 5 name -->
+      <section class="step" data-focus="f-name" data-type="input">
+        <div class="title-block">
+          <p class="title">What's your name?</p>
+          <p class="para">Your first name can not be changed later.</p>
+        </div>
+        <input class="field" id="f-name" type="text" inputmode="text" placeholder="First name" autocomplete="given-name" />
+        <p class="field-error" id="err-name"></p>
+        <p class="err" id="err-name"></p>
+        <div class="input-foot">
+          <button class="btn step-next" disabled>Continue</button>
+          <p class="foot-text">Visible by other users</p>
+        </div>
+      </section>
       <!-- 0 phone -->
       <section class="step" data-type="input" data-focus="f-phone">
         <div class="title-block">
@@ -203,7 +391,6 @@
           <p class="foot-text">🔒 Your number will never be shared with anyone</p>
         </div>
       </section>
-
       <!-- 2 code (6 segments) -->
       <section class="step" data-type="code">
         <div class="title-block">
@@ -224,164 +411,6 @@
           <p class="foot-text">You should receive the code within 30s<br><u>Didn't receive the code?</u></p>
         </div>
       </section>
-
-      <!-- 3 email -->
-      <section class="step" data-type="input" data-focus="f-email">
-        <div class="title-block">
-          <p class="title">What's your email address?</p>
-          <p class="para">It can be used to recover access to your account later.</p>
-        </div>
-        <input class="field" id="f-email" type="email" inputmode="email" placeholder="Email address" autocomplete="email" />
-        <p class="field-error" id="err-email"></p>
-        <p class="err" id="err-email"></p>
-        <div class="input-foot"><button class="btn step-next" disabled>Continue</button></div>
-      </section>
-
-      <!-- 4 birth date (dd mm yyyy, auto-advance) -->
-      <section class="step" data-type="birth">
-        <div class="title-block"><p class="title">What's your birth date?</p></div>
-        <div class="segments">
-          <input class="field seg" id="b-mm" inputmode="numeric" maxlength="2" placeholder="mm">
-          <input class="field seg" id="b-dd" inputmode="numeric" maxlength="2" placeholder="dd">
-          <input class="field seg" id="b-yyyy" inputmode="numeric" maxlength="4" placeholder="yyyy">
-        </div>
-        <p class="field-error" id="err-birth"></p>
-        <p class="err" id="err-birth"></p>
-        <div class="input-foot"><button class="btn step-next" disabled>Continue</button></div>
-      </section>
-
-      <!-- 5 name -->
-      <section class="step" data-focus="f-name" data-type="input">
-        <div class="title-block">
-          <p class="title">What's your name?</p>
-          <p class="para">Your first name can not be changed later.</p>
-        </div>
-        <input class="field" id="f-name" type="text" inputmode="text" placeholder="First name" autocomplete="given-name" />
-        <p class="field-error" id="err-name"></p>
-        <p class="err" id="err-name"></p>
-        <div class="input-foot">
-          <button class="btn step-next" disabled>Continue</button>
-          <p class="foot-text">Visible by other users</p>
-        </div>
-      </section>
-
-      <!-- 6 identify -->
-      <section class="step" data-type="single">
-        <div class="title-block"><p class="title">How do you identify?</p></div>
-        <div class="opts" data-single>
-          <button class="opt">I am a woman</button>
-          <button class="opt">I am a man</button>
-          <button class="opt">I am non-binary</button>
-        </div>
-      </section>
-
-      <!-- 7 who to meet -->
-      <section class="step" data-type="multi">
-        <div class="title-block"><p class="title">Who do you want<br>to meet?</p></div>
-        <div class="opts" data-multi>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Women</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Men</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Non-binaries</div>
-        </div>
-      </section>
-
-      <!-- 8 their age -->
-      <section class="step" data-type="agerange">
-        <div class="title-block">
-          <p class="title">How old should<br>they be?</p>
-          <p class="para">Select the ideal age range for your partner. We ask for a minimum 5-year range.</p>
-        </div>
-        <p class="range-label">Between <span id="age-lo">25</span> and <span id="age-hi">45</span></p>
-        <div class="dual" id="dual">
-          <div class="dual-track"></div>
-          <div class="dual-fill" id="dual-fill"></div>
-          <input type="range" id="age-min" min="18" max="75" value="25" />
-          <input type="range" id="age-max" min="18" max="75" value="45" />
-        </div>
-      </section>
-
-      <!-- 8b where do you live -->
-      <section class="step" data-type="single">
-        <div class="title-block"><p class="title">Where do you live?</p></div>
-        <div class="opts" data-single>
-          <button class="opt">Lower Manhattan</button>
-          <button class="opt">Midtown Manhattan</button>
-          <button class="opt">Upper Manhattan</button>
-          <button class="opt">Brooklyn</button>
-          <button class="opt">Queens</button>
-          <button class="opt">Bronx</button>
-          <button class="opt">New Jersey</button>
-          <button class="opt">Long Island</button>
-          <button class="opt">Staten Island</button>
-          <button class="opt">I don't live near NYC</button>
-        </div>
-      </section>
-
-      <!-- 9 education -->
-      <section class="step" data-type="single">
-        <div class="title-block"><p class="title">What is your<br>education level?</p></div>
-        <div class="opts" data-single>
-          <button class="opt">High school / Secondary school</button>
-          <button class="opt">Undergrad</button>
-          <button class="opt">Postgrad</button>
-          <button class="opt">Prefer not to say</button>
-        </div>
-      </section>
-
-      <!-- 10 children -->
-      <section class="step" data-type="single">
-        <div class="title-block"><p class="title">Do you have<br>children already?</p></div>
-        <div class="opts" data-single>
-          <button class="opt">Don't have children</button>
-          <button class="opt">Have children</button>
-        </div>
-      </section>
-
-      <!-- 11 ethnicity -->
-      <section class="step" data-type="multi">
-        <div class="title-block"><p class="title">What's your ethnicity?</p></div>
-        <div class="opts" data-multi>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Black/African Descent</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Caucasian/White</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>East Asian</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Hispanic/Latino</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Middle Eastern</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Native American</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Pacific Islander</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>South Asian</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Southeast Asian</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Indian</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Other</div>
-        </div>
-      </section>
-
-      <!-- 12 religion -->
-      <section class="step" data-type="multi">
-        <div class="title-block"><p class="title">What are your<br>religious beliefs?</p></div>
-        <div class="opts" data-multi>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Agnostic</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Atheist</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Buddhist</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Catholic</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Christian</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Hindu</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Jewish</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Muslim</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Sikh</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Spiritual</div>
-          <div class="chk"><span class="box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 6"/></svg></span>Other</div>
-        </div>
-      </section>
-
-      <!-- 13 photos -->
-      <section class="step" data-type="photos">
-        <div class="title-block">
-          <p class="title" id="photo-title">Add at least<br>2 photos of you</p>
-          <p class="para" id="photo-sub">Pictures of our members help us understand their preferences and verify their identity. They will never be shown to your matches before a blind date.</p>
-        </div>
-        <div class="photo-grid two" id="photo-grid"></div>
-      </section>
-
       <!-- 14 amata intro -->
       <section class="step" data-type="intro">
         <div class="title-block">
@@ -390,13 +419,11 @@
         </div>
         <div class="intro-img" id="intro-img"></div>
       </section>
-
       <!-- 15 choose amata -->
       <section class="step" data-type="avatar">
         <div class="title-block"><p class="title">Choose your AI assistant<br>We call them "Amatas"</p></div>
         <div class="avatar-grid" id="avatar-grid"></div>
       </section>
-
       <!-- 16 generating -->
       <section class="step" data-type="generating">
         <div class="title-block"><p class="title">Generating your<br>Amata ...</p></div>
@@ -418,9 +445,11 @@
   </div>
 
   <script>
-    // Funnel: record an anonymous visit when the onboarding (phone) page loads.
+    // Funnel: record an anonymous visit when the onboarding page loads.
     // Fire-and-forget; never blocks the UI. The server sets a per-browser cookie
-    // and dedups, so this counts unique browsers that reached the phone step.
+    // and dedups, so this counts unique browsers that reached onboarding. (The
+    // first step is no longer phone - it's birth date in v2 - but this fires on
+    // load regardless of which step shows first.)
     try { fetch('/auth/visit', { method: 'POST' }); } catch (e) {}
 
     const steps = [...document.querySelectorAll('.step')];
@@ -448,8 +477,10 @@
     const FOOT = { agerange: 'Not visible by other users', intro: 'Never share sensitive data to your AI or other users' };
 
     function show(n, focusNow) {
+      // The welcome/landing step is full-bleed: hide the back/progress topnav.
+      const isWelcome = steps[n] && steps[n].dataset.type === 'welcome';
       const tn = document.getElementById('topnav');
-      if (tn) tn.style.display = 'flex';
+      if (tn) tn.style.display = isWelcome ? 'none' : 'flex';
       steps.forEach((s, idx) => {
         s.classList.toggle('active', idx === n);
         s.classList.toggle('left', idx < n);
@@ -670,9 +701,11 @@
           const st = await (await fetch('/onboarding/status')).json();
           if (st.onboarding_done) { window.location.href = '/chat'; return; }
           showError(s, '');
-          // Resume at saved step if any, else continue to next step.
-          if (st.onboarding_step && st.onboarding_step > i) { i = st.onboarding_step; show(i); }
-          else { i++; show(i); }
+          // Phone/verification now sits near the END of the flow, so after a
+          // successful verify we simply continue to the next step. (In the old
+          // phone-first flow this jumped to a saved onboarding_step to resume;
+          // that's no longer meaningful here.)
+          i++; show(i);
           return;
         } catch { showError(s, 'The verification code you entered is not valid'); return; }
       }
@@ -923,6 +956,17 @@
     }));
 
     document.getElementById('back').addEventListener('click', () => { if (i>0){i--;show(i);} });
+    // Welcome step: "Apply now" records the applied event (funnel) then advances
+    // into the flow (next step is birth date, index 1). Close exits to the
+    // marketing homepage.
+    const wApply = document.getElementById('welcome-apply');
+    const goNext = () => {
+      try { fetch('/auth/applied', { method: 'POST' }); } catch (e) {}
+      i = 1; show(1, true);
+    };
+    if (wApply) wApply.addEventListener('click', goNext);
+    const wClose = document.getElementById('welcome-close');
+    if (wClose) wClose.addEventListener('click', () => { window.location.href = 'https://blindtuesdate.com'; });
     document.getElementById('under18-back').addEventListener('click', () => {
       document.getElementById('under18').style.display='none';
       // go back to the birth step

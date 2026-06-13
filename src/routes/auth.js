@@ -50,6 +50,24 @@ export default async function authRoutes(app) {
     }
   });
 
+  // Clicked "Apply now" on the welcome step to proceed into onboarding. Stamps
+  // applied_at on the session's row (the funnel's "Applied" step). Fire-and-
+  // forget from the client; never blocks. Idempotent (COALESCE keeps first).
+  app.post('/auth/applied', async (request, reply) => {
+    try {
+      const uid = getSessionUserId(request);
+      if (uid) {
+        await query(
+          `UPDATE users SET applied_at = COALESCE(applied_at, now()) WHERE id = $1`,
+          [uid]
+        );
+      }
+    } catch (err) {
+      request.log.warn({ err: err.message }, 'applied log failed');
+    }
+    return { ok: true };
+  });
+
   // Ask for a verification code to be sent to a phone number.
   app.post('/auth/request-code', async (request, reply) => {
     const { phone, country } = request.body || {};
