@@ -32,9 +32,20 @@ export const FUNNEL_VERSIONS = [
   {
     id: 'v2',
     label: 'v2 (birthdate first, phone late, no email)',
-    active: true,
+    active: false,
     steps: [
       'visited', 'applied', 'birth_date', 'gender', 'gender_pref', 'age_range',
+      'neighborhood', 'education', 'has_kids', 'ethnicity', 'religion',
+      'photos', 'name', 'phone_number', 'verif_code', 'avatar',
+      'tasks', 'paid',
+    ],
+  },
+  {
+    id: 'v3',
+    label: 'V3 (birth date 1st, apply button on home)',
+    active: true,
+    steps: [
+      'visited', 'birth_date', 'gender', 'gender_pref', 'age_range',
       'neighborhood', 'education', 'has_kids', 'ethnicity', 'religion',
       'photos', 'name', 'phone_number', 'verif_code', 'avatar',
       'tasks', 'paid',

@@ -228,7 +228,11 @@
     </div>
 
     <div class="shell" id="shell">
-      <!-- 0 welcome / landing (default for logged-out users) -->
+      <!-- 0 welcome / landing - DEACTIVATED for V3 (Apply now lives on the
+           marketing homepage; this app starts directly at birth date). To
+           re-enable, uncomment this section AND restore the 'visited'->'applied'
+           wiring (the welcome-apply handler + the 'applied' funnel step). Kept
+           verbatim so it's trivially restorable.
       <section class="step welcome-step" data-type="welcome">
         <img class="welcome-torn" src="/pay/torn-edge.png" alt="" />
         <img class="welcome-logo" src="/logo.png" alt="amata" />
@@ -240,10 +244,14 @@
           <button class="btn" id="welcome-apply">Apply now</button>
         </div>
       </section>
+      -->
 
       <!-- 4 birth date (dd mm yyyy, auto-advance) -->
+      <!-- V3: birth date is now the FIRST step. Page load fires /auth/visit, so
+           "visited" is counted on this screen. -->
       <section class="step" data-type="birth">
-        <div class="title-block"><p class="title">What's your birth date?</p></div>
+        <div class="title-block"><p class="title">First, what's your birthdate?</p></div>
+        <p class="para">All participants must be at least 21.</p>
         <div class="segments">
           <input class="field seg" id="b-mm" inputmode="numeric" maxlength="2" placeholder="mm">
           <input class="field seg" id="b-dd" inputmode="numeric" maxlength="2" placeholder="dd">
@@ -440,7 +448,7 @@
 
   <!-- under-18 rejection overlay -->
   <div id="under18" style="display:none;position:fixed;inset:0;background:#fff;z-index:100;flex-direction:column;align-items:center;justify-content:center;padding:0 40px;text-align:center">
-    <p style="font-family:var(--cp);font-size:30px;font-weight:400;margin:0 0 20px">Sorry, you must be over 18 to use the app</p>
+    <p style="font-family:var(--cp);font-size:30px;font-weight:400;margin:0 0 20px">Sorry, you must be at least 21 to use the app</p>
     <button id="under18-back" style="font-family:var(--cp);font-size:16px;background:none;border:none;text-decoration:underline;cursor:pointer">Made a mistake in your birth date?</button>
   </div>
 
@@ -713,7 +721,7 @@
       // under-18 gate on birth date
       if (s.dataset.type === 'birth') {
         const dd=+document.getElementById('b-dd').value, mm=+document.getElementById('b-mm').value, yy=+document.getElementById('b-yyyy').value;
-        if (ageFrom(dd,mm,yy) < 18) { document.getElementById('under18').style.display='flex'; return; }
+        if (ageFrom(dd,mm,yy) < 21) { document.getElementById('under18').style.display='flex'; return; }
       }
 
       // All other steps: background-save, then advance.
@@ -956,17 +964,10 @@
     }));
 
     document.getElementById('back').addEventListener('click', () => { if (i>0){i--;show(i);} });
-    // Welcome step: "Apply now" records the applied event (funnel) then advances
-    // into the flow (next step is birth date, index 1). Close exits to the
-    // marketing homepage.
-    const wApply = document.getElementById('welcome-apply');
-    const goNext = () => {
-      try { fetch('/auth/applied', { method: 'POST' }); } catch (e) {}
-      i = 1; show(1, true);
-    };
-    if (wApply) wApply.addEventListener('click', goNext);
-    const wClose = document.getElementById('welcome-close');
-    if (wClose) wClose.addEventListener('click', () => { window.location.href = 'https://blindtuesdate.com'; });
+    // V3: the welcome/landing screen is deactivated (Apply now lives on the
+    // marketing homepage), so the app starts at birth date. The welcome-apply /
+    // welcome-close wiring and the /auth/applied call were removed with it; if
+    // you re-enable the welcome section, restore that wiring too.
     document.getElementById('under18-back').addEventListener('click', () => {
       document.getElementById('under18').style.display='none';
       // go back to the birth step
