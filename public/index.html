@@ -881,13 +881,63 @@
         .catch(() => { slot.status = 'error'; syncUrls(); renderPhotos(); });
     }
 
-    function readFileToDataUrl(file){
+    // Read + DOWNSCALE + COMPRESS a photo before upload. Phone photos are
+    // multi-megabyte; sending them raw (base64, ~33% larger) made uploads take
+    // 30-45s and saturated the server. We draw the image to a canvas at a max
+    // long-edge of 1600px and export JPEG q=0.82 - typically a 10-30x size cut
+    // with no visible loss for profile photos. Falls back to the raw data URL if
+    // anything in the resize path fails, so uploads never break outright.
+    const MAX_EDGE = 1600;
+    const JPEG_QUALITY = 0.82;
+
+    function rawFileToDataUrl(file){
       return new Promise((resolve, reject) => {
         const r = new FileReader();
         r.onload = () => resolve(r.result);
         r.onerror = () => reject(r.error || new Error('read_failed'));
         r.readAsDataURL(file);
       });
+    }
+
+    async function loadBitmap(file){
+      // createImageBitmap respects EXIF orientation with imageOrientation set,
+      // and is fast/memory-friendly on mobile. Fall back to an <img> if needed.
+      if (window.createImageBitmap) {
+        try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+        catch {}
+      }
+      const dataUrl = await rawFileToDataUrl(file);
+      return await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('img_decode_failed'));
+        img.src = dataUrl;
+      });
+    }
+
+    async function readFileToDataUrl(file){
+      // Non-images or tiny files: just read as-is.
+      if (!file.type || !file.type.startsWith('image/')) {
+        return rawFileToDataUrl(file);
+      }
+      try {
+        const bmp = await loadBitmap(file);
+        const w = bmp.width, h = bmp.height;
+        const scale = Math.min(1, MAX_EDGE / Math.max(w, h));
+        const tw = Math.round(w * scale), th = Math.round(h * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = tw; canvas.height = th;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bmp, 0, 0, tw, th);
+        if (bmp.close) bmp.close();
+        const out = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+        // Guard: if the canvas output is somehow larger or empty, use the raw read.
+        if (!out || out.length < 100) return await rawFileToDataUrl(file);
+        return out;
+      } catch {
+        // Any decode/canvas failure -> fall back to raw upload (never block).
+        return await rawFileToDataUrl(file);
+      }
     }
 
     // Add newly selected files (respecting the 6-photo cap), each uploaded
