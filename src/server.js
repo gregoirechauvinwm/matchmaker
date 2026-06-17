@@ -72,6 +72,7 @@ await app.register((await import('./routes/admin.js')).default);
 // Onboarding (profile form saves + status).
 await app.register((await import('./routes/onboarding.js')).default);
 await app.register((await import('./routes/pay.js')).default);
+await app.register((await import('./routes/rsvp.js')).default);
 await app.register((await import('./routes/rate.js')).default);
 await app.register((await import('./routes/webhook.js')).default);
 

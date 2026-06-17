@@ -61,6 +61,7 @@ const MIGRATIONS = [
   'migrate-first-touch-identity.js',
   'migrate-funnel-version.js',
   'migrate-applied-at.js',
+  'migrate-payment-kind.js',
 ];
 
 function run(script) {

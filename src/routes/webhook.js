@@ -57,6 +57,24 @@ export default async function webhookRoutes(app) {
       }
     }
 
+    // RSVP / no-show-fee flow: the card was saved via a SetupIntent (no charge).
+    // Mark the link confirmed so it counts as "paid" in the funnel, recorded as
+    // kind='rsvp_card'. No tokens are granted (the date is free).
+    if (event.type === 'setup_intent.succeeded') {
+      const si = event.data.object;
+      const payToken = si.metadata?.pay_token;
+      const kind = si.metadata?.kind || 'rsvp_card';
+      if (payToken) {
+        try {
+          const result = await fulfillPayment({ payToken, tokens: 0, amountCents: 0, kind });
+          request.log.info({ result, kind }, 'rsvp card saved');
+        } catch (err) {
+          request.log.error({ err: err.message }, 'rsvp fulfill failed');
+          return reply.code(500).send('fulfillment_failed');
+        }
+      }
+    }
+
     // Acknowledge receipt so Stripe stops retrying.
     return reply.code(200).send({ received: true });
   });

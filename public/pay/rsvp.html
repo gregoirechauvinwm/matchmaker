@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Confirm your blind date</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet" />
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    :root {
+      --cp: "Crimson Pro", Georgia, serif;
+      --green: #24B93C;
+      --accent: #6474FF;
+    }
+    html, body {
+      margin: 0; padding: 0; width: 100%; min-height: 100dvh;
+      font-family: var(--cp);
+      background: #fff;
+      color: #000;
+      -webkit-text-size-adjust: 100%;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .page {
+      position: relative; z-index: 2;
+      min-height: 100dvh;
+      background: transparent;
+      display: flex; flex-direction: column;
+      animation: slideUp 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .bottom-cream {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      height: 120px; background: #F5DBCA;
+      z-index: 0; pointer-events: none;
+    }
+    .torn {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      z-index: 1;
+      width: 100%; height: auto;
+      pointer-events: none; display: block;
+    }
+
+    .content { position: relative; z-index: 2; padding: 14px 22px 60px; flex: 1; }
+
+    .topbar { display: flex; align-items: center; height: 40px; }
+    .close { font-size: 26px; line-height: 1; background: none; border: none; color: #000; cursor: pointer; padding: 4px; }
+
+    .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: 6px; }
+    .head-left { display: flex; flex-direction: column; align-items: flex-start; }
+    .title { font-size: 30px; font-weight: 400; line-height: 1.12; margin: 0; }
+    .title em { font-style: italic; }
+
+    /* Two photos (user + match), overlapping and tilted. */
+    .polas { position: relative; width: 120px; height: 110px; flex-shrink: 0; margin-top: 4px; }
+    .pola { position: absolute; width: 88px; height: 100px; }
+    .pola .photo {
+      width: 100%; height: 100%;
+      object-fit: cover; object-position: center;
+      border-radius: 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+    }
+    .pola.left  { left: 0;  top: 8px; transform: rotate(-8deg); z-index: 1; }
+    .pola.right { right: 0; top: 0;   transform: rotate(7deg);  z-index: 2; }
+
+    .datepill {
+      display: inline-block; margin-top: 18px;
+      background: #E1E1E1; border-radius: 360px;
+      padding: 7px 16px;
+      font-size: 19px; letter-spacing: -0.004em; color: #000;
+    }
+    .datepill .d { font-weight: 700; }
+    .datepill .t { font-weight: 400; }
+
+    /* "Manhattan venues only" line with pin icon */
+    .venue { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 18px; color: #000; }
+    .venue svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+    /* features */
+    .features { margin-top: 26px; display: flex; flex-direction: column; gap: 16px; }
+    .feat { display: flex; gap: 14px; align-items: flex-start; }
+    .feat .ic { width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; }
+    .feat .ic img { width: 30px; height: 30px; object-fit: contain; }
+    .feat .ic svg { width: 28px; height: 28px; }
+    .feat .ft { font-size: 16px; font-weight: 600; color: #000; line-height: 1.15; }
+    .feat .fd { font-size: 16px; font-weight: 400; color: #999999; line-height: 1.2; margin-top: 2px; }
+
+    /* consent checkbox box */
+    .consent {
+      margin-top: 30px; border: 1px solid #cfcfcf; border-radius: 16px;
+      padding: 16px 16px; display: flex; gap: 12px; align-items: flex-start;
+      cursor: pointer; background: #fff;
+    }
+    .consent input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .consent .box {
+      width: 26px; height: 26px; flex-shrink: 0; border: 1.5px solid #000;
+      border-radius: 7px; display: grid; place-items: center; margin-top: 2px;
+      background: #fff;
+    }
+    .consent .box svg { width: 16px; height: 16px; opacity: 0; }
+    .consent input:checked + .box { background: #000; }
+    .consent input:checked + .box svg { opacity: 1; }
+    .consent .ctext { font-size: 17px; line-height: 1.25; color: #000; }
+    .consent .ctext a { color: #000; text-decoration: underline; }
+
+    /* payment section: hidden until consent is checked */
+    .pays { margin-top: 26px; display: none; flex-direction: column; align-items: center; gap: 16px; }
+    .pays.show { display: flex; }
+    .pays-help { font-size: 16px; color: #000; text-align: center; line-height: 1.3; margin: 0 4px; }
+    .pays-buttons { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+    .pays-spinner { display: none; height: 54px; align-items: center; justify-content: center; }
+    .pays-spinner .spin {
+      width: 26px; height: 26px; border: 2.5px solid #e3e3e3; border-top-color: #111;
+      border-radius: 50%; animation: payspin .8s linear infinite;
+    }
+    @keyframes payspin { to { transform: rotate(360deg); } }
+    .pays.loading .pays-buttons { display: none; }
+    .pays.loading .pays-spinner { display: flex; }
+
+    .btn { width: 329px; max-width: 100%; height: 54px; border: none; border-radius: 360px;
+      font-family: var(--cp); font-weight: 600; font-size: 22px; cursor: pointer;
+      display: grid; place-items: center; }
+    .btn.cc { background: #DFDFDF; color: #000; }
+
+    /* processing overlay */
+    .overlay {
+      position: fixed; inset: 0; z-index: 50; background: rgba(255,255,255,0.92);
+      display: none; align-items: center; justify-content: center; flex-direction: column;
+    }
+    .overlay.show { display: flex; }
+    .overlay .spin {
+      width: 34px; height: 34px; border: 3px solid #e3e3e3; border-top-color: #111;
+      border-radius: 50%; animation: payspin .8s linear infinite;
+    }
+    .overlay .lbl { margin-top: 16px; font-size: 19px; }
+
+    /* bottom sheets */
+    .sheet { position: fixed; inset: 0; z-index: 60; display: none; }
+    .sheet.show { display: block; }
+    .sheet .scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.4); }
+    .sheet .panel {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      background: #fff; border-radius: 20px 20px 0 0; padding: 22px 22px 40px;
+      max-height: 88dvh; overflow-y: auto;
+    }
+    .sheet .close-sheet { position: absolute; top: 14px; right: 16px; font-size: 22px; background: none; border: none; cursor: pointer; }
+    .sheet h3 { font-weight: 500; font-size: 22px; margin: 4px 0 16px; }
+    .pay-error { color: #FF3B30; font-size: 15px; margin-top: 10px; min-height: 18px; }
+
+    .footer { position: relative; z-index: 2; text-align: center; font-size: 15px; color: #777; padding: 0 22px 26px; }
+  </style>
+</head>
+<body>
+  <div class="bottom-cream"></div>
+  <img class="torn" id="torn" src="/pay/torn-edge.png" alt="" />
+  <div class="page">
+
+    <div class="content">
+      <div class="topbar">
+        <button class="close" id="back" aria-label="Back">&#8592;</button>
+      </div>
+
+      <div class="head">
+        <div class="head-left">
+          <h1 class="title">We set up your<br>blind date <em>for free</em></h1>
+          <div class="datepill"><span class="d" id="date-d">Tues</span> <span class="t" id="date-t"></span></div>
+          <div class="venue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span>Manhattan venues only</span>
+          </div>
+        </div>
+        <div class="polas">
+          <div class="pola right">
+            <img id="pola-right" class="photo" alt="" />
+          </div>
+          <div class="pola left">
+            <img id="pola-left" class="photo" alt="" />
+          </div>
+        </div>
+      </div>
+
+      <div class="features">
+        <div class="feat">
+          <div class="ic"><img src="/pay/humans.png" alt="" /></div>
+          <div><div class="ft">Matches reviewed by humans</div><div class="fd">Our team rechecks every pair. Matches below 70% compatibility are canceled.</div></div>
+        </div>
+        <div class="feat">
+          <div class="ic"><img src="/pay/vetted.png" alt="" /></div>
+          <div><div class="ft">Vetted participants</div><div class="fd">Only the Amata members who received positive feedback after dates are accepted.</div></div>
+        </div>
+        <div class="feat">
+          <div class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
+          </div>
+          <div><div class="ft">Cancellation fees &amp; policy</div><div class="fd">Late cancellations and no shows are charged $30.00 and members are black listed.</div></div>
+        </div>
+      </div>
+
+      <!-- consent gate: ticking this reveals the payment section -->
+      <label class="consent" for="consent-cb">
+        <input type="checkbox" id="consent-cb" />
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        <span class="ctext">I confirm my presence. I accept <a href="#" id="tos-link">Terms of Service</a> and the $30 cancellation fee if I cancel 24h before or don't show up</span>
+      </label>
+
+      <div class="pays" id="pays">
+        <p class="pays-help">Enter payment info to authorize cancellation fees. You'll only be charged for late cancellations or no-shows.</p>
+        <div class="pays-spinner" id="pays-spinner"><div class="spin"></div></div>
+        <div class="pays-buttons" id="pays-buttons">
+          <div id="express-checkout-element"></div>
+          <button class="btn cc" id="btn-card">Or enter credit card</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer" id="footer"></div>
+  </div>
+
+  <!-- processing overlay -->
+  <div class="overlay" id="overlay">
+    <div class="spin"></div><div class="lbl">Saving your details</div>
+  </div>
+
+  <!-- ToS sheet -->
+  <div class="sheet" id="tos">
+    <div class="scrim" data-close-sheet></div>
+    <div class="panel">
+      <button class="close-sheet" data-close-sheet>&#10005;</button>
+      <h3>Terms of Service</h3>
+      <p>(To be filled later.)</p>
+    </div>
+  </div>
+
+  <!-- card-entry sheet: Stripe Payment Element mounts here -->
+  <div class="sheet" id="cardsheet">
+    <div class="scrim" data-close-sheet></div>
+    <div class="panel">
+      <button class="close-sheet" data-close-sheet>&#10005;</button>
+      <h3>Enter your card</h3>
+      <div id="payment-element"></div>
+      <div id="pay-error" class="pay-error"></div>
+      <button class="btn cc" id="btn-card-submit" style="width:100%; margin-top:18px;">Save card</button>
+    </div>
+  </div>
+
+  <script>
+    // Token is the last path segment: /rsvp/:token
+    const token = location.pathname.split('/').filter(Boolean).pop();
+    const paysEl = document.getElementById('pays');
+    const footerEl = document.getElementById('footer');
+
+    let stripe = null, elements = null, paymentElement = null, expressElement = null;
+    let clientSecret = null;
+    let setupStarted = false;
+    const returnUrl = location.origin + '/rsvp/' + token + '/return';
+
+    function showError(msg) {
+      const e = document.getElementById('pay-error');
+      if (e) e.textContent = msg || '';
+    }
+
+    // Create a SetupIntent (saves the card for a later off-session charge -
+    // the $30 no-show fee - while displaying $0.00 now), then mount Elements.
+    async function setupPayment() {
+      if (!stripe || setupStarted) return;
+      setupStarted = true;
+      paysEl.classList.add('loading');
+      try {
+        const res = await fetch(`/rsvp/${token}/intent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) { paysEl.classList.remove('loading'); setupStarted = false; footerEl.textContent = 'Could not start. Please try again.'; return; }
+        const data = await res.json();
+        clientSecret = data.client_secret;
+
+        // Elements bound to the SetupIntent (mode is implied by the client secret).
+        elements = stripe.elements({
+          clientSecret,
+          appearance: { theme: 'stripe', variables: { borderRadius: '360px' } },
+        });
+
+        // Card form (in the sheet).
+        if (paymentElement) paymentElement.unmount();
+        paymentElement = elements.create('payment', { layout: 'tabs' });
+        paymentElement.mount('#payment-element');
+
+        // Express Checkout (Apple Pay / Google Pay). Only appears when a wallet
+        // is available AND the domain is verified with Apple (production).
+        if (expressElement) { try { expressElement.unmount(); } catch {} expressElement = null; }
+        const ece = elements.create('expressCheckout', { buttonHeight: 54 });
+        ece.on('confirm', async () => {
+          const { error } = await stripe.confirmSetup({ elements, confirmParams: { return_url: returnUrl } });
+          if (error) showError(error.message);
+        });
+        ece.mount('#express-checkout-element');
+        expressElement = ece;
+
+        paysEl.classList.remove('loading');
+      } catch {
+        paysEl.classList.remove('loading');
+        setupStarted = false;
+        footerEl.textContent = 'Could not start. Please try again.';
+      }
+    }
+
+    // Consent checkbox reveals the payment section and kicks off the SetupIntent.
+    document.getElementById('consent-cb').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        paysEl.classList.add('show');
+        setupPayment();
+      } else {
+        paysEl.classList.remove('show');
+      }
+    });
+
+    // Card sheet.
+    document.getElementById('btn-card').addEventListener('click', () => openSheet('cardsheet'));
+    document.getElementById('btn-card-submit').addEventListener('click', async () => {
+      if (!stripe || !elements) return;
+      showError('');
+      const btn = document.getElementById('btn-card-submit');
+      btn.disabled = true;
+      document.getElementById('overlay').classList.add('show');
+      const { error } = await stripe.confirmSetup({ elements, confirmParams: { return_url: returnUrl } });
+      if (error) {
+        document.getElementById('overlay').classList.remove('show');
+        btn.disabled = false;
+        showError(error.message);
+      }
+    });
+
+    // ToS link opens the sheet (don't toggle the checkbox).
+    document.getElementById('tos-link').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); openSheet('tos'); });
+
+    function openSheet(id) { document.getElementById(id).classList.add('show'); }
+    document.querySelectorAll('[data-close-sheet]').forEach((el) => {
+      el.addEventListener('click', () => el.closest('.sheet').classList.remove('show'));
+    });
+
+    document.getElementById('back').addEventListener('click', () => { window.location.href = '/chat'; });
+
+    async function load() {
+      try {
+        const res = await fetch(`/rsvp/${token}/data`);
+        if (!res.ok) { footerEl.textContent = 'This link is invalid or expired.'; return; }
+        const data = await res.json();
+
+        const parts = (data.date_label || '').split(' - ');
+        document.getElementById('date-d').textContent = parts[0] || '';
+        document.getElementById('date-t').textContent = parts[1] ? '- ' + parts[1] : '';
+
+        const left = document.getElementById('pola-left');
+        if (data.user_photo) left.src = data.user_photo; else left.style.display = 'none';
+        document.getElementById('pola-right').src = data.look_for_image;
+
+        if (data.publishable_key && window.Stripe) {
+          stripe = Stripe(data.publishable_key);
+        }
+        if (data.already_confirmed) {
+          footerEl.textContent = 'Your spot is already confirmed.';
+        }
+      } catch {
+        footerEl.textContent = 'Something went wrong loading this page.';
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

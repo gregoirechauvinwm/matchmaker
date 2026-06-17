@@ -104,22 +104,29 @@ import { getPublished } from './config-versions.js';
 // message into the user's chat. Idempotent: if the link is already marked paid,
 // it does nothing (Stripe may deliver a webhook more than once).
 // Returns { granted: boolean, tokens, userId } so the caller can log.
-export async function fulfillPayment({ payToken, tokens, amountCents = null }) {
+export async function fulfillPayment({ payToken, tokens, amountCents = null, kind = 'token' }) {
   const n = Number(tokens) || 0;
   // Atomically claim the link: only proceed if it exists and isn't paid yet.
-  // Persist amount_cents + tokens here (for revenue reporting) in the same
-  // write that marks it paid, so they can never drift apart.
+  // Persist amount_cents + tokens + kind here in the same write that marks it
+  // paid, so they can never drift apart.
   const claim = await query(
     `UPDATE payment_links
-        SET paid_at = now(), amount_cents = $2, tokens = $3
+        SET paid_at = now(), amount_cents = $2, tokens = $3, kind = $4
       WHERE token = $1 AND paid_at IS NULL
       RETURNING user_id`,
-    [payToken, amountCents, n]
+    [payToken, amountCents, n, kind]
   );
   if (claim.rows.length === 0) {
     return { granted: false, reason: 'already_paid_or_missing' };
   }
   const userId = claim.rows[0].user_id;
+
+  // RSVP / no-show-fee flow: the card was merely saved (no payment, free date).
+  // Don't grant tokens and don't inject the payment-success message - just mark
+  // the link confirmed (done above) so it counts as "paid" in the funnel.
+  if (kind === 'rsvp_card') {
+    return { granted: true, kind, tokens: 0, userId };
+  }
 
   // Increment the user's token balance.
   await query(

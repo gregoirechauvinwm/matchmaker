@@ -33,6 +33,7 @@
     "migrate:first-touch-identity": "node scripts/migrate-first-touch-identity.js",
     "migrate:funnel-version": "node scripts/migrate-funnel-version.js",
     "migrate:applied-at": "node scripts/migrate-applied-at.js",
+    "migrate:payment-kind": "node scripts/migrate-payment-kind.js",
     "seed:rating-photos": "node scripts/seed-rating-photos.js",
     "migrate:all": "node scripts/migrate-all.js"
   },
