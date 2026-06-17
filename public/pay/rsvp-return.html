@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Confirming your spot…</title>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    html, body { margin: 0; height: 100%; font-family: "Crimson Pro", Georgia, serif; background: #fff; color: #000; }
+    .wrap { height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+    .spin { width: 28px; height: 28px; border: 2.5px solid #ddd; border-top-color: #000; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .lbl { font-size: 22px; }
+    .sub { font-size: 16px; color: #777; max-width: 280px; text-align: center; }
+    .back { margin-top: 8px; font-size: 16px; font-weight: 600; color: #6474FF; background: none; border: none; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="spin"></div>
+    <div class="lbl">Confirming your spot…</div>
+    <div class="sub" id="sub">Just a moment.</div>
+    <button class="back" id="back" style="display:none;">Back to chat</button>
+  </div>
+  <script>
+    const token = location.pathname.split('/').filter(Boolean)[1]; // /rsvp/{token}/return
+    const back = document.getElementById('back');
+    const sub = document.getElementById('sub');
+    back.addEventListener('click', () => { window.location.href = '/chat'; });
+
+    let done = false;
+    function goToChat() {
+      if (done) return;
+      done = true;
+      // Mark that we just confirmed so the chat reveals the RSVP confirmation
+      // message with the typing animation (like a fresh AI message).
+      try { sessionStorage.setItem('justRsvped', '1'); } catch {}
+      window.location.href = '/chat';
+    }
+
+    // Poll: the webhook (source of truth) marks the link confirmed once the
+    // SetupIntent succeeds. Then head back to chat where the confirmation
+    // message will be waiting.
+    async function poll() {
+      try {
+        const res = await fetch(`/rsvp/${token}/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.confirmed) { goToChat(); return; }
+        }
+      } catch {}
+      if (!done) setTimeout(poll, 1200);
+    }
+    poll();
+
+    // Slow-webhook fallback: after ~18s, let the user head back manually. The
+    // card-save is still safe (the webhook will finish); the confirmation
+    // message will simply appear on the chat's next load.
+    setTimeout(() => {
+      if (done) return;
+      sub.textContent = "You're all set — your spot is confirmed. You can head back to the chat.";
+      back.style.display = 'inline';
+    }, 18000);
+  </script>
+</body>
+</html>

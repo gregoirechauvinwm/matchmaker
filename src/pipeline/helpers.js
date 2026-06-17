@@ -67,13 +67,13 @@ export async function runEvaluation({ promptRow, context, parts }) {
 // are required (so a stray "I accept that" in reasoning text can't trigger an
 // ending). We scan for all recognized bracket tokens and take the LAST one
 // (models often reason, then conclude). Anything unrecognized -> CONTINUE.
-// Returns one of: 'CONTINUE' | 'END_TASK' | 'ACCEPT' | 'REFUSE' | 'SEND_PAYMENT' | 'RATE_PHOTOS'.
+// Returns one of: 'CONTINUE' | 'END_TASK' | 'ACCEPT' | 'REFUSE' | 'SEND_PAYMENT' | 'SEND_RSVP' | 'RATE_PHOTOS'.
 export function parseEvaluation(text) {
   if (!text) return 'CONTINUE';
-  const matches = String(text).toUpperCase().match(/\[(END_TASK|ACCEPT|REFUSE|SEND_PAYMENT|RATE_PHOTOS|CONTINUE)\]/g);
+  const matches = String(text).toUpperCase().match(/\[(END_TASK|ACCEPT|REFUSE|SEND_PAYMENT|SEND_RSVP|RATE_PHOTOS|CONTINUE)\]/g);
   if (!matches || matches.length === 0) return 'CONTINUE';
   const last = matches[matches.length - 1].replace(/[[\]]/g, '');
-  return last; // END_TASK | ACCEPT | REFUSE | SEND_PAYMENT | RATE_PHOTOS | CONTINUE
+  return last; // END_TASK | ACCEPT | REFUSE | SEND_PAYMENT | SEND_RSVP | RATE_PHOTOS | CONTINUE
 }
 
 export async function runWhisperer({ promptRow, context, parts }) {

@@ -30,7 +30,7 @@ async function readDraft() {
             initial_thought, end_message, max_user_messages, has_pretask_hook
        FROM task_types ORDER BY position`
   );
-  const cfg = await query('SELECT flow_opener, payment_prompt, payment_success, rate_prompt, rate_success FROM app_config WHERE id = 1');
+  const cfg = await query('SELECT flow_opener, payment_prompt, payment_success, rate_prompt, rate_success, rsvp_prompt, rsvp_success FROM app_config WHERE id = 1');
   return {
     prompts: prompts.rows,
     parts: parts.rows,
@@ -40,6 +40,8 @@ async function readDraft() {
     payment_success: cfg.rows[0]?.payment_success ?? '',
     rate_prompt: cfg.rows[0]?.rate_prompt ?? '',
     rate_success: cfg.rows[0]?.rate_success ?? '',
+    rsvp_prompt: cfg.rows[0]?.rsvp_prompt ?? '',
+    rsvp_success: cfg.rows[0]?.rsvp_success ?? '',
   };
 }
 
@@ -230,22 +232,28 @@ export async function saveAndPublish(config, label = null) {
         typeof config.payment_prompt === 'string' ||
         typeof config.payment_success === 'string' ||
         typeof config.rate_prompt === 'string' ||
-        typeof config.rate_success === 'string') {
+        typeof config.rate_success === 'string' ||
+        typeof config.rsvp_prompt === 'string' ||
+        typeof config.rsvp_success === 'string') {
       await client.query(
-        `INSERT INTO app_config (id, flow_opener, payment_prompt, payment_success, rate_prompt, rate_success)
-         VALUES (1, $1, $2, $3, $4, $5)
+        `INSERT INTO app_config (id, flow_opener, payment_prompt, payment_success, rate_prompt, rate_success, rsvp_prompt, rsvp_success)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO UPDATE SET
            flow_opener     = COALESCE($1, app_config.flow_opener),
            payment_prompt  = COALESCE($2, app_config.payment_prompt),
            payment_success = COALESCE($3, app_config.payment_success),
            rate_prompt     = COALESCE($4, app_config.rate_prompt),
-           rate_success    = COALESCE($5, app_config.rate_success)`,
+           rate_success    = COALESCE($5, app_config.rate_success),
+           rsvp_prompt     = COALESCE($6, app_config.rsvp_prompt),
+           rsvp_success    = COALESCE($7, app_config.rsvp_success)`,
         [
           config.flow_opener ?? null,
           config.payment_prompt ?? null,
           config.payment_success ?? null,
           config.rate_prompt ?? null,
           config.rate_success ?? null,
+          config.rsvp_prompt ?? null,
+          config.rsvp_success ?? null,
         ]
       );
     }

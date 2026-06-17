@@ -87,7 +87,7 @@ function renderMenu() {
     li.addEventListener('click', () => select(li.dataset.kind, li.dataset.key));
   });
   // Reflect selection on the static scripted-line items.
-  ['flow_opener', 'payment_prompt', 'payment_success', 'rate_prompt', 'rate_success'].forEach((k) => {
+  ['flow_opener', 'payment_prompt', 'payment_success', 'rate_prompt', 'rate_success', 'rsvp_prompt', 'rsvp_success'].forEach((k) => {
     const el = document.querySelector(`.menu-item[data-kind="scripted"][data-key="${k}"]`);
     if (el) el.classList.toggle('active', isSel('scripted', k));
   });
@@ -134,6 +134,14 @@ const SCRIPTED_META = {
   rate_success: {
     title: 'Rate success',
     hint: "Shown after the user finishes rating all the photos. Supports {{user.*}} variables.",
+  },
+  rsvp_prompt: {
+    title: 'RSVP prompt',
+    hint: "Sent (with the RSVP card) when evaluation returns [SEND_RSVP] - the free-date / no-show-fee flow. Supports {{user.*}} variables.",
+  },
+  rsvp_success: {
+    title: 'RSVP success',
+    hint: "Shown after the user confirms their spot (saves a card). Supports {{user.*}} variables.",
   },
 };
 function renderScriptedEditor(key) {
@@ -273,6 +281,8 @@ saveBtn.addEventListener('click', async () => {
     payment_success: working.payment_success || '',
     rate_prompt: working.rate_prompt || '',
     rate_success: working.rate_success || '',
+    rsvp_prompt: working.rsvp_prompt || '',
+    rsvp_success: working.rsvp_success || '',
     prompts: working.prompts.map((p) => ({ prompt_type: p.prompt_type, body: p.body, model: p.model })),
     parts: working.parts.map((p) => ({ name: p.name, body: p.body })),
     tasks: working.tasks.map((t) => ({

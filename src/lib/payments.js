@@ -122,9 +122,34 @@ export async function fulfillPayment({ payToken, tokens, amountCents = null, kin
   const userId = claim.rows[0].user_id;
 
   // RSVP / no-show-fee flow: the card was merely saved (no payment, free date).
-  // Don't grant tokens and don't inject the payment-success message - just mark
-  // the link confirmed (done above) so it counts as "paid" in the funnel.
+  // Don't grant tokens. Inject a scripted RSVP-confirmation message (distinct
+  // from the payment-success message) as a new AI turn so it shows in chat.
   if (kind === 'rsvp_card') {
+    const published = await getPublished();
+    const rawConfirm = published?.snapshot?.rsvp_success
+      || "You're all set — your spot is confirmed. See you Tuesday!";
+    const userRow = await query('SELECT * FROM users WHERE id = $1', [userId]);
+    const user = userRow.rows[0] || {};
+    const rendered = renderTemplate(rawConfirm, { user: userContext(user) }, {});
+    const confirmText = rendered.ok ? rendered.text : rawConfirm;
+
+    const seqRow = await query(
+      'SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM turns WHERE user_id = $1',
+      [userId]
+    );
+    const seq = seqRow.rows[0].next;
+    const turn = await query(
+      `INSERT INTO turns (user_id, seq, user_message, task_id)
+       VALUES ($1, $2, NULL, NULL) RETURNING id`,
+      [userId, seq]
+    );
+    await query(
+      `INSERT INTO prompt_results
+         (turn_id, prompt_type, resolved_prompt, output, status, config_version_id, seq_in_turn)
+       VALUES ($1, 'speaker', $2, $3, 'ok', $4, 1)`,
+      [turn.rows[0].id, '(scripted: rsvp success)', confirmText, published?.id || null]
+    );
+
     return { granted: true, kind, tokens: 0, userId };
   }
 

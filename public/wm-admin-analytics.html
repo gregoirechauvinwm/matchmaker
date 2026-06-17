@@ -28,7 +28,13 @@
     .an-total { font-size: 13px; color: #666; margin-left: auto; }
     /* The SVG can be wider than the panel; scroll it horizontally inside the
        chart box rather than letting it push the whole page wide. */
-    .an-chart { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; }
+    .an-chart { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; position: relative; }
+    .bar-tip {
+      position: fixed; z-index: 50; pointer-events: none; display: none;
+      background: #111; color: #fff; font-size: 12px; line-height: 1.45;
+      padding: 8px 10px; border-radius: 8px; white-space: pre; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+    }
+    .bar-rect[data-tip] { cursor: default; }
     .an-empty { color: #999; font-size: 14px; padding: 40px 0; }
     .an-loading { color: #999; font-size: 14px; padding: 40px 0; }
     /* SVG bar text */
@@ -163,9 +169,17 @@
         const act = versions.find(v => v.active);
         selectedVersion = act ? act.id : (versions.find(v => v.id !== 'core')?.id || 'core');
       }
-      tabsEl.innerHTML = versions.map(v =>
-        `<button class="an-tab ${v.id === 'core' ? 'core' : ''} ${v.id === selectedVersion ? 'active' : ''}" data-version="${v.id}">${esc(v.label)}</button>`
-      ).join('');
+      tabsEl.innerHTML = versions.map(v => {
+        let tip = '';
+        if (v.id === 'core') tip = 'All users, across every version';
+        else if (v.activeFrom) {
+          const d = new Date(v.activeFrom);
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          tip = `For users registering from ${mm}/${dd}/${d.getFullYear()}`;
+        } else tip = 'No users yet';
+        return `<button class="an-tab ${v.id === 'core' ? 'core' : ''} ${v.id === selectedVersion ? 'active' : ''}" data-version="${v.id}" title="${esc(tip)}">${esc(v.label)}</button>`;
+      }).join('');
       tabsEl.querySelectorAll('.an-tab').forEach(btn => {
         btn.addEventListener('click', () => {
           selectedVersion = btn.dataset.version;
@@ -198,6 +212,33 @@
         return;
       }
       chart.innerHTML = renderFunnelSVG(bars);
+      wireBarTips(chart);
+    }
+
+    // Attach a hover tooltip to every bar that has a data-tip. Uses a single
+    // shared HTML element (more reliable + styleable than SVG <title>, and it
+    // renders multi-line text). Positioned at the cursor via position:fixed.
+    function wireBarTips(chart){
+      let tipEl = document.getElementById('bar-tip');
+      if (!tipEl) {
+        tipEl = document.createElement('div');
+        tipEl.id = 'bar-tip';
+        tipEl.className = 'bar-tip';
+        document.body.appendChild(tipEl);
+      }
+      chart.querySelectorAll('.bar-rect[data-tip]').forEach((rect) => {
+        rect.addEventListener('mouseenter', (e) => {
+          tipEl.textContent = rect.getAttribute('data-tip');
+          tipEl.style.display = 'block';
+          moveTip(e);
+        });
+        rect.addEventListener('mousemove', moveTip);
+        rect.addEventListener('mouseleave', () => { tipEl.style.display = 'none'; });
+      });
+      function moveTip(e){
+        tipEl.style.left = (e.clientX + 12) + 'px';
+        tipEl.style.top = (e.clientY + 12) + 'px';
+      }
     }
 
     function renderFunnelSVG(bars){
@@ -218,8 +259,13 @@
         const color = COLORS[b.group] || '#bdbdbd';
         // A bar is "tall" if it can comfortably hold the count + step% inside it.
         const tall = h > 46;
-        // the bar itself
-        s += '<rect class="bar-rect" x="' + bx + '" y="' + by + '" width="' + barW + '" height="' + h + '" rx="4" fill="' + color + '"/>';
+        // the bar itself, with a hover tooltip (HTML, wired after insertion).
+        // The green "completed" bar shows the token vs card-capture split.
+        let tip = b.label + ': ' + b.count;
+        if (b.breakdown) {
+          tip = 'Token payment: ' + (b.breakdown.token || 0) + '\nCard capture: ' + (b.breakdown.card_capture || 0);
+        }
+        s += '<rect class="bar-rect" data-tip="' + esc(tip) + '" x="' + bx + '" y="' + by + '" width="' + barW + '" height="' + h + '" rx="4" fill="' + color + '"></rect>';
         if (tall) {
           // total % above the bar; count + step% stacked inside near the bottom (white).
           s += '<text class="bar-top" x="' + cx + '" y="' + (by - 10) + '" text-anchor="middle">' + b.pctOfFirst + '%</text>';

@@ -37,10 +37,14 @@ async function loadUsers() {
     // Stage pill: grey while onboarding, blue once signed up / in a task.
     const stageClass = stage.kind === 'onboarding' ? 'pill-grey' : 'pill-blue';
     const stagePill = `<span class="u-pill ${stageClass}">${esc(stage.label)}</span>`;
-    // Optional green pill: tokens purchased.
+    // Optional green pill: tokens purchased (token paywall).
     const tokens = u.token_count || 0;
     const tokenPill = tokens > 0
       ? `<span class="u-pill pill-green">${tokens} token${tokens === 1 ? '' : 's'}</span>`
+      : '';
+    // Optional green pill: card captured (RSVP / no-show-fee flow).
+    const cardPill = u.has_card_capture
+      ? `<span class="u-pill pill-green">card capture</span>`
       : '';
     const photo = (Array.isArray(u.photos) && u.photos[0]) ? u.photos[0] : null;
     const avatar = photo
@@ -54,7 +58,7 @@ async function loadUsers() {
         <div class="u-phone">${u.phone_e164
           ? esc(u.phone_e164)
           : (u.phone_entered ? esc(u.phone_entered) + ' <span class="u-unverified">(unverified)</span>' : '<span class="u-nophone">no phone</span>')}</div>
-        <div class="u-status">${stagePill}${tokenPill}${archivedTag}</div>
+        <div class="u-status">${stagePill}${tokenPill}${cardPill}${archivedTag}</div>
       </div>
     </li>`;
   }).join('') || '<li class="muted" style="padding:12px 16px">No users yet.</li>';

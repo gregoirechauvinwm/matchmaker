@@ -85,9 +85,26 @@ export async function getFunnel({ from = null, to = null, version = null } = {})
     taskCountByType = new Map(counts.map((r) => [r.task_type_id, r.c]));
   }
 
-  let paidCount = 0;
+  // "Completed" = users with a paid/confirmed payment_link, broken down by kind:
+  //   token       - paid upfront for a date token (the original paywall)
+  //   rsvp_card   - saved a card to authorize the no-show fee (card capture)
+  // Both count as completed. We keep the split for the funnel's green-bar hover.
+  let completedTotal = 0, tokenCount = 0, cardCaptureCount = 0;
   if (userIds.length) {
-    paidCount = (await query(
+    const rows = (await query(
+      `SELECT COALESCE(kind, 'token') AS kind, COUNT(DISTINCT user_id)::int AS c
+         FROM payment_links
+        WHERE paid_at IS NOT NULL AND user_id = ANY($1::uuid[])
+        GROUP BY COALESCE(kind, 'token')`,
+      [userIds]
+    )).rows;
+    for (const r of rows) {
+      if (r.kind === 'rsvp_card') cardCaptureCount = r.c;
+      else tokenCount += r.c;
+    }
+    // Distinct users who completed by ANY kind (a user could in theory have both;
+    // count them once for the total).
+    completedTotal = (await query(
       `SELECT COUNT(DISTINCT user_id)::int AS c
          FROM payment_links WHERE paid_at IS NOT NULL AND user_id = ANY($1::uuid[])`,
       [userIds]
@@ -96,13 +113,18 @@ export async function getFunnel({ from = null, to = null, version = null } = {})
 
   // Expand a step key into one or more concrete bars with counts.
   // Onboarding sign-up steps get an " ok" suffix on their label (a convention
-  // requested for the dashboard) - EXCEPT 'visited'. Tasks and paid keep their
-  // own names untouched.
+  // requested for the dashboard) - EXCEPT 'visited'. Tasks keep their own names.
   function barsForKey(key) {
     if (key === 'visited') return [{ key, label: 'Visited', group: 'onboarding', count: users.length }];
     if (key === 'applied') return [{ key, label: 'Applied ok', group: 'onboarding', count: users.filter((u) => u.applied_at != null).length }];
     if (key === 'phone_number') return [{ key, label: 'Phone number ok', group: 'onboarding', count: users.filter((u) => u.phone_entered_at != null).length }];
-    if (key === 'paid') return [{ key, label: 'paid', group: 'paid', count: paidCount }];
+    // 'completed' (green) = paid + card capture. breakdown rides along for the hover.
+    if (key === 'completed' || key === 'paid') {
+      return [{
+        key: 'completed', label: 'completed', group: 'paid', count: completedTotal,
+        breakdown: { token: tokenCount, card_capture: cardCaptureCount },
+      }];
+    }
     if (key === 'tasks') {
       return taskTypes.map((tt) => ({ key: 'task:' + tt.id, label: tt.name, group: 'task', count: taskCountByType.get(tt.id) || 0 }));
     }
@@ -139,10 +161,26 @@ export async function getFunnel({ from = null, to = null, version = null } = {})
 }
 
 // List available funnel versions (for the dashboard tabs), newest first, plus
-// the cross-version 'core' view. Returns [{ id, label, active }].
-export function getFunnelVersions() {
-  const versions = [...FUNNEL_VERSIONS].reverse().map((v) => ({ id: v.id, label: v.label, active: !!v.active }));
-  return [{ id: 'core', label: 'All versions (milestones)', active: false }, ...versions];
+// the cross-version 'core' view. Each version carries `activeFrom`: the date of
+// the FIRST user stamped with it (derived from data = when it effectively went
+// live), used for the tab's "for users registering from mm/dd/yyyy" hover.
+// Returns [{ id, label, active, activeFrom }].
+export async function getFunnelVersions() {
+  // First signup per version stamp.
+  const rows = (await query(
+    `SELECT funnel_version AS v, MIN(created_at) AS first_at
+       FROM users WHERE funnel_version IS NOT NULL
+      GROUP BY funnel_version`
+  )).rows;
+  const firstByVersion = new Map(rows.map((r) => [r.v, r.first_at]));
+
+  const versions = [...FUNNEL_VERSIONS].reverse().map((v) => ({
+    id: v.id,
+    label: v.label,
+    active: !!v.active,
+    activeFrom: firstByVersion.get(v.id) || null, // null = no users yet
+  }));
+  return [{ id: 'core', label: 'All versions (milestones)', active: false, activeFrom: null }, ...versions];
 }
 
 // DAILY REVENUE: sum of amount_cents grouped by paid_at date, within the window.

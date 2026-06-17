@@ -14,7 +14,11 @@ export async function listUsers(includeArchived = false) {
             u.phone_verified_at, u.email, u.birth_date, u.gender,
             u.gender_pref, u.partner_age_min, u.neighborhood, u.education,
             u.has_kids, u.ethnicity, u.religion, u.chosen_amata,
-            t.name AS current_task_name
+            t.name AS current_task_name,
+            EXISTS (
+              SELECT 1 FROM payment_links pl
+               WHERE pl.user_id = u.id AND pl.paid_at IS NOT NULL AND pl.kind = 'rsvp_card'
+            ) AS has_card_capture
        FROM users u
        LEFT JOIN task_types t ON t.id = u.current_task_id
       ${includeArchived ? '' : 'WHERE u.archived_at IS NULL'}

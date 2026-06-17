@@ -199,7 +199,51 @@ export async function* runTurn({ userId, turnId, openFirstTask = false }) {
       prompt_type: 'speaker', resolved_prompt: `(scripted: payment card)|${payUrl}`,
       output: 'Payment link sent', status: 'ok', model: null,
     }, configVersionId, nextSeq(), curTaskId);
-    yield { type: 'bubble', kind: 'payment_card', text: 'Payment link sent', payUrl };
+    yield { type: 'done' };
+    return;
+  }
+
+  // --- [SEND_RSVP]: the alternative to [SEND_PAYMENT]. The date is free; we
+  // send the RSVP / no-show-fee page (/rsvp/{token}) which saves a card to
+  // authorize the $30 cancellation fee. Same shape as SEND_PAYMENT (skip
+  // whisperer + speaker, scripted prompt + card bubble, stay in task); the only
+  // differences are the destination (/rsvp vs /pay) and the card kind. Switch a
+  // task between paywall and RSVP by emitting [SEND_RSVP] instead of
+  // [SEND_PAYMENT] in that task's evaluation prompt. -------------------------
+  if (evalRes.value === 'SEND_RSVP') {
+    await saveResult(turnId, {
+      prompt_type: 'whisperer', resolved_prompt: '(skipped: send rsvp)',
+      output: null, status: 'skipped', model: null,
+    }, configVersionId, nextSeq(), curTaskId);
+    await saveResult(turnId, {
+      prompt_type: 'speaker', resolved_prompt: '(skipped: send rsvp)',
+      output: null, status: 'skipped', model: null,
+    }, configVersionId, nextSeq(), curTaskId);
+
+    // 1) Scripted RSVP prompt message. Uses the configured rsvp_prompt, else a
+    // dedicated RSVP default (NOT the payment prompt - this message is meant to
+    // be different from the paywall's).
+    const promptCtx = buildContext({ user, task, histories, parts, outcomes });
+    const rawPrompt = snapshot?.rsvp_prompt || '';
+    const renderedPrompt = renderTemplate(rawPrompt, promptCtx, parts);
+    const promptText = (renderedPrompt.ok ? renderedPrompt.text : rawPrompt)
+      || "Your date is set! Confirm your spot below — it's free, we just need a card on file for the cancellation policy.";
+    await saveResult(turnId, {
+      prompt_type: 'speaker', resolved_prompt: '(scripted: rsvp prompt)',
+      output: promptText, status: 'ok', model: null,
+    }, configVersionId, nextSeq(), curTaskId);
+    yield { type: 'typing' };
+    yield { type: 'bubble', text: promptText };
+
+    // 2) RSVP-card bubble -> /rsvp/{token}. Reuses the same payment_links token
+    // (kind is stamped 'rsvp_card' at fulfillment when the SetupIntent succeeds).
+    const rsvpToken = await createPaymentLink(userId);
+    const rsvpUrl = `/rsvp/${rsvpToken}`;
+    await saveResult(turnId, {
+      prompt_type: 'speaker', resolved_prompt: `(scripted: rsvp card)|${rsvpUrl}`,
+      output: 'RSVP link sent', status: 'ok', model: null,
+    }, configVersionId, nextSeq(), curTaskId);
+    yield { type: 'bubble', kind: 'rsvp_card', text: 'RSVP link sent', rsvpUrl };
 
     yield { type: 'done' };
     return;

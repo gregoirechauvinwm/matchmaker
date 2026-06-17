@@ -206,7 +206,7 @@ export default async function adminRoutes(app) {
     return getFunnel({ from: from || null, to: to || null, version: version || null });
   });
   app.get(`${BASE}/api/analytics/funnel-versions`, async () => {
-    return { versions: getFunnelVersions() };
+    return { versions: await getFunnelVersions() };
   });
   app.get(`${BASE}/api/analytics/revenue`, async (request) => {
     const { from, to } = request.query || {};

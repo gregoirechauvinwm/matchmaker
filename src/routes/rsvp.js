@@ -60,9 +60,10 @@ export default async function rsvpRoutes(app) {
     return { confirmed: !!(link && link.paid_at) };
   });
 
-  // Stripe redirects here after confirmSetup. Serve the shared return shell.
+  // Stripe redirects here after confirmSetup. Serve the dedicated RSVP return
+  // page (separate from the paywall's, so the copy is correct by construction).
   app.get('/rsvp/:token/return', async (request, reply) => {
-    return reply.sendFile('pay/return.html', publicDir);
+    return reply.sendFile('pay/rsvp-return.html', publicDir);
   });
 
   // Create a SetupIntent (save card for a later off-session $30 fee). Shows

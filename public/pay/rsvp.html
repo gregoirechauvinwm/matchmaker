@@ -108,7 +108,7 @@
     /* payment section: hidden until consent is checked */
     .pays { margin-top: 26px; display: none; flex-direction: column; align-items: center; gap: 16px; }
     .pays.show { display: flex; }
-    .pays-help { font-size: 16px; color: #000; text-align: center; line-height: 1.3; margin: 0 4px; }
+    .pays-help { font-size: 13px; color: #000; text-align: center; line-height: 1.3; margin: 0 4px; }
     .pays-buttons { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
     .pays-spinner { display: none; height: 54px; align-items: center; justify-content: center; }
     .pays-spinner .spin {
@@ -147,6 +147,10 @@
     }
     .sheet .close-sheet { position: absolute; top: 14px; right: 16px; font-size: 22px; background: none; border: none; cursor: pointer; }
     .sheet h3 { font-weight: 500; font-size: 22px; margin: 4px 0 16px; }
+    .tos-body { font-size: 15px; line-height: 1.4; color: #222; }
+    .tos-body h4 { font-size: 16px; font-weight: 600; margin: 18px 0 6px; }
+    .tos-body p { margin: 0 0 10px; }
+    .tos-body .muted { color: #777; font-size: 13px; margin-top: 18px; }
     .pay-error { color: #FF3B30; font-size: 15px; margin-top: 10px; min-height: 18px; }
 
     .footer { position: relative; z-index: 2; text-align: center; font-size: 15px; color: #777; padding: 0 22px 26px; }
@@ -184,17 +188,17 @@
       <div class="features">
         <div class="feat">
           <div class="ic"><img src="/pay/humans.png" alt="" /></div>
-          <div><div class="ft">Matches reviewed by humans</div><div class="fd">Our team rechecks every pair. Matches below 70% compatibility are canceled.</div></div>
+          <div><div class="ft">Matchmaking made by humans</div><div class="fd">Our team rechecks every pair. Matches below 75% compatibility are canceled.</div></div>
         </div>
         <div class="feat">
           <div class="ic"><img src="/pay/vetted.png" alt="" /></div>
-          <div><div class="ft">Vetted participants</div><div class="fd">Only the Amata members who received positive feedback after dates are accepted.</div></div>
+          <div><div class="ft">Vetted participants</div><div class="fd">All members are reviewed by our team.</div></div>
         </div>
         <div class="feat">
           <div class="ic">
             <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
           </div>
-          <div><div class="ft">Cancellation fees &amp; policy</div><div class="fd">Late cancellations and no shows are charged $30.00 and members are black listed.</div></div>
+          <div><div class="ft">Cancellation fees &amp; policy</div><div class="fd">Cancellations made less than 24 hours before the date and no-shows are charged $30.00.</div></div>
         </div>
       </div>
 
@@ -202,11 +206,11 @@
       <label class="consent" for="consent-cb">
         <input type="checkbox" id="consent-cb" />
         <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-        <span class="ctext">I confirm my presence. I accept <a href="#" id="tos-link">Terms of Service</a> and the $30 cancellation fee if I cancel 24h before or don't show up</span>
+        <span class="ctext">I confirm my presence. I accept <a href="#" id="tos-link">Terms of Service</a> and cancellation fee</span>
       </label>
 
       <div class="pays" id="pays">
-        <p class="pays-help">Enter payment info to authorize cancellation fees. You'll only be charged for late cancellations or no-shows.</p>
+        <p class="pays-help">You'll never be charged except for late cancellations or no-shows.</p>
         <div class="pays-spinner" id="pays-spinner"><div class="spin"></div></div>
         <div class="pays-buttons" id="pays-buttons">
           <div id="express-checkout-element"></div>
@@ -229,7 +233,30 @@
     <div class="panel">
       <button class="close-sheet" data-close-sheet>&#10005;</button>
       <h3>Terms of Service</h3>
-      <p>(To be filled later.)</p>
+      <div class="tos-body">
+        <p>These terms govern your participation in a Blind Tuesdate, a one-to-one date arranged by Amata's matchmaking team. By confirming your spot, you agree to the following.</p>
+
+        <h4>How a Blind Tuesdate works</h4>
+        <p>Every Tuesday at 8PM, our matchmaking team pairs two members for a one-to-one date at a partner venue in Manhattan that we book on your behalf. Venues are cocktail bars; non-alcoholic options are always available. The date is between the two matched members only — no one else attends.</p>
+        <p>On the Tuesday morning before your date, you receive an introduction to your match. You will not see a photo of the other member beforehand — that's the point of a blind date. A private chat between the two members opens two hours before the date so you can coordinate if needed.</p>
+
+        <h4>Matching and compatibility</h4>
+        <p>We guarantee a compatibility of at least 75% between matched members. If our team cannot reach that threshold for a given week, we will not make an introduction, and no date will take place that week.</p>
+        <p>All members are reviewed by our team before being accepted. We may decline or remove a member at our discretion.</p>
+
+        <h4>Confirmation, cancellation and no-shows</h4>
+        <p>The date itself is free. When you confirm your spot, we securely save a payment method to enforce our cancellation policy. You are not charged to attend.</p>
+        <p>If you cancel less than 24 hours before the date, or do not show up, a fee of $30.00 is charged to your saved payment method. Cancellations made more than 24 hours in advance are free. The fee covers the venue reservation and the time of your match, who is counting on you.</p>
+        <p>If your match cancels or fails to show, you are not charged, and we will work to arrange a future date for you.</p>
+
+        <h4>Conduct</h4>
+        <p>We expect members to treat each other and venue staff with respect. Behaviour that is harassing, unsafe, or otherwise inappropriate may result in removal from Amata without refund of any applicable fees.</p>
+
+        <h4>Changes</h4>
+        <p>We may update these terms from time to time. Material changes will be communicated to members before they take effect.</p>
+
+        <p class="muted">Last updated: June 2026. These terms are a plain-language summary for members and may be supplemented by Amata's full legal terms.</p>
+      </div>
     </div>
   </div>
 

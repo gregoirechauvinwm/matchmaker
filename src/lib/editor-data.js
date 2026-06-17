@@ -13,7 +13,7 @@ export async function getDraft() {
             initial_thought, end_message, max_user_messages, has_pretask_hook
        FROM task_types ORDER BY position`
   );
-  const cfg = await query('SELECT flow_opener, payment_prompt, payment_success, rate_prompt, rate_success FROM app_config WHERE id = 1');
+  const cfg = await query('SELECT flow_opener, payment_prompt, payment_success, rate_prompt, rate_success, rsvp_prompt, rsvp_success FROM app_config WHERE id = 1');
   return {
     prompts: prompts.rows,
     parts: parts.rows,
@@ -23,5 +23,7 @@ export async function getDraft() {
     payment_success: cfg.rows[0]?.payment_success ?? '',
     rate_prompt: cfg.rows[0]?.rate_prompt ?? '',
     rate_success: cfg.rows[0]?.rate_success ?? '',
+    rsvp_prompt: cfg.rows[0]?.rsvp_prompt ?? '',
+    rsvp_success: cfg.rows[0]?.rsvp_success ?? '',
   };
 }

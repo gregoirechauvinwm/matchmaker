@@ -198,6 +198,23 @@ function appendBubble(m, { animate = false, animateAvatar = false } = {}) {
     return;
   }
 
+  // RSVP card bubble: same card design as payment, different copy + link.
+  // Title "Confirm your blind date", CTA "Confirm my spot", -> /rsvp.
+  if (m.kind === 'rsvp_card') {
+    const card = document.createElement('a');
+    card.className = 'pay-card';
+    card.href = m.rsvpUrl || '#';
+    card.dataset.id = m.id;
+    card.innerHTML = `
+      <div class="pay-card-title">Confirm your blind date</div>
+      <div class="pay-card-divider"></div>
+      <div class="pay-card-cta">Confirm my spot</div>`;
+    messagesEl.appendChild(card);
+    if (!rendering) reconcileAvatars(false);
+    scrollToBottom();
+    return;
+  }
+
   const div = document.createElement('div');
   div.className = `bubble ${m.role}`;
   if (animate && m.role === 'user') div.classList.add('animate-in');
@@ -439,6 +456,7 @@ function handleEvent(event) {
       text: event.text,
       ...(event.kind === 'payment_card' ? { kind: 'payment_card', payUrl: event.payUrl } : {}),
       ...(event.kind === 'rate_card' ? { kind: 'rate_card', rateUrl: event.rateUrl } : {}),
+      ...(event.kind === 'rsvp_card' ? { kind: 'rsvp_card', rsvpUrl: event.rsvpUrl } : {}),
     });
   } else if (event.type === 'error') {
     enqueueBubble({ id: 'e-' + Date.now(), role: 'ai', text: 'Sorry, something hiccuped. Try again.' });
@@ -489,5 +507,7 @@ let _justPaid = false;
 try { _justPaid = sessionStorage.getItem('justPaid') === '1'; if (_justPaid) sessionStorage.removeItem('justPaid'); } catch {}
 let _justRated = false;
 try { _justRated = sessionStorage.getItem('justRated') === '1'; if (_justRated) sessionStorage.removeItem('justRated'); } catch {}
-if (_justPaid || _justRated) loadMessagesAfterPayment();
+let _justRsvped = false;
+try { _justRsvped = sessionStorage.getItem('justRsvped') === '1'; if (_justRsvped) sessionStorage.removeItem('justRsvped'); } catch {}
+if (_justPaid || _justRated || _justRsvped) loadMessagesAfterPayment();
 else loadMessages();

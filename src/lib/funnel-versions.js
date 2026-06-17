@@ -26,7 +26,7 @@ export const FUNNEL_VERSIONS = [
       'visited', 'phone_number', 'verif_code', 'email', 'birth_date', 'name',
       'gender', 'gender_pref', 'age_range', 'neighborhood', 'education',
       'has_kids', 'ethnicity', 'religion', 'photos', 'avatar',
-      'tasks', 'paid',
+      'tasks', 'completed',
     ],
   },
   {
@@ -37,18 +37,29 @@ export const FUNNEL_VERSIONS = [
       'visited', 'applied', 'birth_date', 'gender', 'gender_pref', 'age_range',
       'neighborhood', 'education', 'has_kids', 'ethnicity', 'religion',
       'photos', 'name', 'phone_number', 'verif_code', 'avatar',
-      'tasks', 'paid',
+      'tasks', 'completed',
     ],
   },
   {
     id: 'v3',
     label: 'V3 (birth date 1st, apply button on home)',
+    active: false,
+    steps: [
+      'visited', 'birth_date', 'gender', 'gender_pref', 'age_range',
+      'neighborhood', 'education', 'has_kids', 'ethnicity', 'religion',
+      'photos', 'name', 'phone_number', 'verif_code', 'avatar',
+      'tasks', 'completed',
+    ],
+  },
+  {
+    id: 'v4',
+    label: 'V4 (card capture + cancellation fee)',
     active: true,
     steps: [
       'visited', 'birth_date', 'gender', 'gender_pref', 'age_range',
       'neighborhood', 'education', 'has_kids', 'ethnicity', 'religion',
       'photos', 'name', 'phone_number', 'verif_code', 'avatar',
-      'tasks', 'paid',
+      'tasks', 'completed',
     ],
   },
 ];
@@ -59,7 +70,7 @@ export const FUNNEL_VERSIONS = [
 // milestone", so the transition %s blend populations (it's milestone tracking,
 // not a strict per-version sequence). Tweak deliberately if your universal
 // milestones change.
-export const CORE_MILESTONES = ['visited', 'phone_number', 'tasks', 'paid'];
+export const CORE_MILESTONES = ['visited', 'phone_number', 'tasks', 'completed'];
 
 export function activeVersion() {
   return FUNNEL_VERSIONS.find((v) => v.active) || FUNNEL_VERSIONS[0];

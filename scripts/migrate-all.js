@@ -62,6 +62,7 @@ const MIGRATIONS = [
   'migrate-funnel-version.js',
   'migrate-applied-at.js',
   'migrate-payment-kind.js',
+  'migrate-rsvp-lines.js',
 ];
 
 function run(script) {

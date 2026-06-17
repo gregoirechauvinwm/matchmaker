@@ -50,6 +50,8 @@ export async function getMessages(userId) {
       const payUrl = isCard ? (rp.split('|')[1] || '/pay/placeholder') : null;
       const isRateCard = rp.startsWith('(scripted: rate card)');
       const rateUrl = isRateCard ? (rp.split('|')[1] || '/rate/placeholder') : null;
+      const isRsvpCard = rp.startsWith('(scripted: rsvp card)');
+      const rsvpUrl = isRsvpCard ? (rp.split('|')[1] || '/rsvp/placeholder') : null;
       messages.push({
         id: `${t.id}-a${i}`,
         role: 'ai',
@@ -57,6 +59,7 @@ export async function getMessages(userId) {
         seq: t.seq,
         ...(isCard ? { kind: 'payment_card', payUrl } : {}),
         ...(isRateCard ? { kind: 'rate_card', rateUrl } : {}),
+        ...(isRsvpCard ? { kind: 'rsvp_card', rsvpUrl } : {}),
       });
     });
   }
