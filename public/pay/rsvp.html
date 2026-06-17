@@ -270,7 +270,6 @@
       try {
         const res = await fetch(`/rsvp/${token}/intent`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
         });
         if (!res.ok) { paysEl.classList.remove('loading'); setupStarted = false; footerEl.textContent = 'Could not start. Please try again.'; return; }
         const data = await res.json();
