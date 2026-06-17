@@ -66,7 +66,7 @@
     .pola.right { right: 0; top: 0;   transform: rotate(7deg);  z-index: 2; }
 
     .datepill {
-      display: inline-block; margin-top: 18px;
+      display: inline-block; margin-top: 4px;
       background: #E1E1E1; border-radius: 360px;
       padding: 7px 16px;
       font-size: 19px; letter-spacing: -0.004em; color: #000;
@@ -74,8 +74,8 @@
     .datepill .d { font-weight: 700; }
     .datepill .t { font-weight: 400; }
 
-    /* "Manhattan venues only" line with pin icon */
-    .venue { display: flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 18px; color: #000; }
+    /* "Manhattan venues only" line with pin icon - italic, tight under the pill */
+    .venue { display: flex; align-items: center; gap: 7px; margin-top: 6px; font-size: 18px; font-style: italic; color: #000; }
     .venue svg { width: 17px; height: 17px; flex-shrink: 0; }
 
     /* features */
@@ -106,7 +106,7 @@
     .consent .ctext a { color: #000; text-decoration: underline; }
 
     /* payment section: hidden until consent is checked */
-    .pays { margin-top: 26px; display: none; flex-direction: column; align-items: center; gap: 16px; }
+    .pays { margin-top: 12px; display: none; flex-direction: column; align-items: center; gap: 16px; }
     .pays.show { display: flex; }
     .pays-help { font-size: 13px; color: #000; text-align: center; line-height: 1.3; margin: 0 4px; }
     .pays-buttons { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
@@ -123,6 +123,8 @@
       font-family: var(--cp); font-weight: 600; font-size: 22px; cursor: pointer;
       display: grid; place-items: center; }
     .btn.cc { background: #DFDFDF; color: #000; }
+    /* Apple Pay (Express Checkout Element) - same width as the card button. */
+    #express-checkout-element { width: 329px; max-width: 100%; }
 
     /* processing overlay */
     .overlay {
