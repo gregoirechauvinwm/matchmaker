@@ -153,6 +153,7 @@ export default async function adminRoutes(app) {
           archived_at: u.archived_at,
           status: u.status || (u.phone_verified_at ? 'verified' : 'anonymous'),
           token_count: u.token_count || 0,
+          has_card_capture: !!u.has_card_capture,
           stage,
         };
       });
